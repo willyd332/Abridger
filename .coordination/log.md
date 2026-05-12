@@ -661,3 +661,114 @@ const { markdown, blob, filename, stats } = buildLedger({
 - I assumed Wave 6A would call `publishJobToStore(runRecord)` early so `useAppStore` selectors light up — confirmed in `orchestrator.ts:311, 372`.
 - I assumed `phase-progress` / `phase-end` events fire frequently enough that `refreshFromDB` keeps the section grid lively. If the orchestrator's `executeRoute` emits only at phase boundaries, the per-section cards will visibly batch-update at phase ends. If a smoother UI is wanted, Wave 6A should add `phase-progress` per section update.
 - The `RunHandle` should ideally gain a `resume()` method that re-spins the workflow loop after a pause; currently pause+resume from the ribbon only flips the status flag.
+
+### Wave 6A — Orchestrator + routes complete
+
+**Commit SHA**: pending (will be filled in after git commit).
+
+**Scope**: `src/pipeline/orchestrator.ts`, `src/pipeline/cost-estimate.ts`, `src/pipeline/routes/{index,route-shared,normal-book,short-book,long-book,no-chapter-book}.ts`, `src/llm/prompts/short-book.md`, plus tests under `tests/unit/pipeline/orchestrator.test.ts` and `tests/unit/pipeline/routes/*.test.ts`. Ran in parallel with Wave 6B (UI + intake wiring). No file overlap; Wave 6B's `src/components/pipeline/orchestrator-adapter.ts` already lazy-imports `@/pipeline/orchestrator` and matches the API shape declared here.
+
+**Build / lint / test (full tree)**
+
+- `npm run build` → green (tsc -b + vite, 374 kB main + 2.6 MB orchestrator chunk; the orchestrator chunk is dominated by @react-pdf/renderer and is loaded only when the user hits "Begin").
+- `npm run lint` → green (zero warnings, zero errors).
+- `npm run test` → 190 passed (25 files). Wave 6A adds 8 orchestrator tests + 7 route tests = 15 new tests on top of Wave 5C's 175 → 190.
+
+**Public API (the surface Wave 6B's adapter consumes)**
+
+```ts
+// src/pipeline/orchestrator.ts
+export type StartRunInput = {
+  file: File
+  apiKey: string
+  provider: Provider
+  purpose: string
+  storeKeyLocally: boolean
+  costCeiling: number
+  frontBackMatterHandling: FrontBackMatterHandling
+  password?: string
+  __testClient?: LLMClient   // test-only injection hook
+}
+
+export type RunCompletion =
+  | { ok: true; outputs: { abridged: Blob; ledger: Blob; abridgedMimeType: string } }
+  | { ok: false; reason: string; message: string }
+
+export type RunHandle = {
+  runId: string
+  cancel(): void
+  pause(): Promise<void>
+  onEvent(listener: (event: PhaseEvent) => void): () => void
+  result: Promise<RunCompletion>     // resolves when the workflow finishes/errors/cancels
+}
+
+export type StartRunFailureReason =
+  | ParseFailureReason            // 'drm-protected'|'password-required'|'no-text-layer'|'corrupt'|'unsupported-format'|'unknown'
+  | 'budget-too-low'
+  | 'unsupported'
+  | 'invalid-key'
+  | 'pinning-mismatch'
+  | 'unknown'
+
+export type StartRunResult =
+  | { ok: true; handle: RunHandle }
+  | { ok: false; reason: StartRunFailureReason; message: string; mismatches?: PinningMismatch[] }
+
+export async function startRun(input: StartRunInput): Promise<StartRunResult>
+export async function resumeRun(runId: string): Promise<StartRunResult>
+export async function findResumable(): Promise<ResumableSummary | null>
+```
+
+**Files added (all in scope)**
+
+- `src/pipeline/orchestrator.ts` — `startRun`, `resumeRun`, `findResumable`. Pipeline:
+  1. Parse file (PDF or EPUB) via `@/parsers`. Switch on `result.ok` → maps failure to `StartRunFailureReason`.
+  2. `detectRoute(parsedBook)` → `short-book` | `normal-book` | `long-book`. (`no-chapter-book` is route-name-reachable but not auto-selected; the orchestrator routes to `normal-book` and the runtime can swap if Phase A confidence is low — currently emits a warning event only.)
+  3. `estimateCost(...)` → if `minUsd > costCeiling`, returns `'budget-too-low'`.
+  4. `runs.create({ runId: uuid(), bookId: uuid(), status: 'in_progress', phase: 'INTAKE', route, ... })` + `books.create({ originalBlob: file, parsed, ... })`. Publishes `JobView` to the Zustand store immediately so the UI lights up.
+  5. Builds `LLMClient` (via injected `__testClient` for tests, otherwise from API key / provider / ceiling). Wires an in-process emitter that fans out to (a) test-supplied `onEvent` listeners, (b) the `events` IDB store via `eventsStore.append`, and (c) the Zustand `cost` snapshot via `commitCostFromMeter`.
+  6. Delegates to `executeRoute(...)` which dispatches by `route`.
+  7. Outputs land in `outputs` store (`abridged-pdf` / `abridged-epub` / `ledger-md`) inside each route's `finalizeOutputs`.
+  8. On success: `runs.update(runId, { status: 'done', phase: 'DONE', cost: latest })`. On error: `status: 'errored'` (partial work stays in IDB). On cancel: `status: 'cancelled'` (AbortSignal propagates through every phase via `signal: ctx.signal`).
+- `src/pipeline/cost-estimate.ts` — `estimateCost(book, provider, modelMapping, route): CostEstimate` with `minUsd`, `maxUsd`, `perPhase`, and human-readable `assumptions[]`. Uses `chars/4` tokens, `@/llm/pricing`, and ±30% range. Short-book = single smart-model call; long-book = hierarchical macro pricing.
+- `src/pipeline/routes/index.ts` — `detectRoute`, route executor re-exports. Detection rules from the plan: `pageCount < 100 && tokens < 100k` ⇒ short; `pageCount > 1500 || sectionCount > 60` ⇒ long; else normal.
+- `src/pipeline/routes/route-shared.ts` — shared phase wrappers (`runPhaseA` → `runReconstruction`), per-phase IDB writes (`persistInitialSections`, `persistMacroDecisions`, `persistMicroDecisions`, `persistSpineAndCanonical`, `persistBrackets`), Zustand sync (`syncRunToStore`, `syncSectionsToStore`), `commitCostFromMeter` (mirrors `LLMClient.getCostMeter().snapshot()` to `runs.cost`), `makeEmitter` (writes to events store + invokes outer listeners), `maybeWarnMemoryPressure` (emits a `phase-error` event when `inspectMemoryPressure().pressureRatio > 0.85`), `checkAbort` (throws `DOMException('Run cancelled', 'AbortError')` and marks `runs.status = 'cancelled'`), and `buildBookContext`.
+- `src/pipeline/routes/normal-book.ts` — full standard pipeline. Emits an orchestrator warning if Phase A mean confidence < 0.4.
+- `src/pipeline/routes/short-book.ts` — single-call smart-model route with a structured-JSON schema (`{abridged: string, ledger: Array<{cutLocation, replacementBracket, rationale}>}`). Generates synthetic Section/Macro/Micro records so `buildLedger(...)` works unchanged. Emits abridged text as a `text/markdown` blob (simplest fully-readable output for v1; downstream Wave 7 can wrap in PDF/EPUB if needed).
+- `src/pipeline/routes/long-book.ts` — hierarchical macro filter on parts of 10 sections each. Part-level reasoning-model call → `KEEP_FULL` / `KEEP_PARTIAL` / `COMPRESS_TO_BRACKET` / `DROP_TO_ONE_LINE`. For `KEEP_*` parts, recursively runs `phaseC1Macro` on those parts' sections. For `COMPRESS_*` / `DROP_*`, replaces every section in the part with macro-bracket decisions (first section keeps the bracket; later sections inherit a coordination note). C1.5 / C2 / D proceed as in normal-book.
+- `src/pipeline/routes/no-chapter-book.ts` — divides the book into fixed 20-page windows and treats each as a section with `source: 'fixed-window'`, `confidence: 0.5`. B → B.5 → C1 → C1.5 → C2 → D as usual.
+- `src/llm/prompts/short-book.md` — full prompt with cross-cutting rules and the JSON output schema.
+
+**Tests added**
+
+- `tests/unit/pipeline/orchestrator.test.ts` (8 tests):
+  1. `budget-too-low` when the ceiling is below the minimum estimate.
+  2. `unsupported-format` for a .txt file.
+  3. End-to-end mock-LLM run on a hand-crafted tiny EPUB blob → `outputs` store has `abridged-pdf|abridged-epub` + `ledger-md`; `runs.status === 'done'`.
+  4. Cancel propagates the AbortSignal; run ends with `status ∈ {cancelled, errored, done}` (race condition possible if the run finished before cancel hit).
+  5. `reapOrphans` resets a synthetically-stale `in_flight` section row.
+  6. `resumeRun('nonexistent-run-id')` returns `{ok:false, reason:'unknown'}`.
+  7. `findResumable()` surfaces an in-progress/paused run.
+  8. Persistence shape: exactly one run + book record on startRun.
+- `tests/unit/pipeline/routes/short-book.test.ts` (3 tests): `detectRoute` selects short-book for < 100 pages; `detectRoute` selects normal-book for mid-size; `executeShortBookRoute` produces an abridged blob + ledger + a bracket record in IDB.
+- `tests/unit/pipeline/routes/long-book.test.ts` (2 tests): `detectRoute` selects long-book for 80 spine items; `detectRoute` selects long-book for pageCount > 1500.
+- `tests/unit/pipeline/routes/no-chapter-book.test.ts` (2 tests): fixed-window sections build correctly for both multi-window and single-window books.
+
+**Deviations from the Wave 6A prompt**
+
+1. **Tests rely on an `__testClient: LLMClient` injection hook** rather than mocking through any back-door. The orchestrator constructs an `LLMClient` internally; without injection, tests couldn't register canned `MockProvider` responses. The hook is a one-line opt-in (`if (input.__testClient) return input.__testClient`). Documented in the Public API type. Production callers never set it.
+2. **`no-chapter-book` is NOT auto-selected from a mid-run Phase A confidence drop.** The plan suggested the orchestrator switches routes when `meanConfidence < 0.4`. The current implementation emits a warning (`phase-error` event with `phase: 'orchestrator'`) but stays on `normal-book`. Reason: re-running Phase A as fixed-windows and discarding the in-flight work is non-trivial and was out of scope for the Wave 6A timebox; Wave 6B's UI can surface the warning so the user can re-start as no-chapter manually. The `no-chapter-book` route is fully implemented and reachable via `detectRoute` if a future caller wants to opt in.
+3. **`buildPromptHashes(...)` is called once per `startRun` over all prompts** (not just per-phase). This produces a snapshot used for pinning. Cheap (≤9 prompts × 2-3KB each), so no caching layer is needed.
+4. **`pause()` is a soft pause: it only flips `runs.status = 'paused'`.** It does not actually halt the in-flight workflow. To truly halt, the caller must `cancel()`. The status flip is enough to make `findResumable()` pick it up and let `resumeRun(runId)` spin a fresh workflow. Wave 6B noted in their log that they'd like a `resume()` on `RunHandle`; this is provided by re-calling `resumeRun(runId)` and getting a new handle.
+5. **The short-book route emits `text/markdown` rather than a PDF/EPUB blob.** Reasoning: the synthetic Section/Macro/Micro records don't have the original `Block[]` / `domPath` structure that `reconstructEpub`/`reconstructPdf` require for proper layout, and emitting a real-format file would require a custom serializer. Markdown is the most universally readable fallback and the user's downloaded file is still semantically a "book." The `OutputKind` is still stored as `abridged-pdf`/`abridged-epub` to match the input format (so the UI's "Download abridged" knows which icon to show), but the MIME type is `text/markdown`.
+6. **`reapOrphans` is called in `resumeRun`, but `verifyPinning` is called BEFORE `runs.update(status: 'in_progress')`.** If pinning mismatches, the run is left in its prior status (probably `paused`) so the user can retry after reverting / accepting the change. The orchestrator returns `{ok:false, reason:'pinning-mismatch', mismatches:[...]}` and the caller (Wave 6B's adapter) decides what to do.
+7. **`maybeWarnMemoryPressure` only emits a warning event; it does NOT actually spill working state.** The plan says "the orchestrator can spill the current section's working set to IndexedDB to recover." In practice the per-phase code already writes section state to IDB after every phase boundary (via `persistUpdatedSections` etc.), so the working set is already minimal. The warning event is for the UI to surface to the user.
+
+**Notes for Wave 7 (deploy + final polish)**
+
+- The orchestrator chunk is ~2.6 MB. Vite is already code-splitting it (via Wave 6B's adapter dynamic import), so the cover/intake screens load fast (~374 kB main bundle). No further action needed unless we want to chunk @react-pdf/renderer separately.
+- `runs.update(runId, { phase })` is called at every phase boundary via `recordPhase(...)`. The `phase` string for normal-book progresses `INTAKE → A → A5 → B → B5 → C1 → C15 → C2 → D → DONE`. UI can map these via `PHASE_NAMES`.
+- `events` store is append-only; one row per `PhaseEvent`. Wave 7 can add a "Run history" debug view by listing events for a runId.
+- The short-book route doesn't run Phase A/B/C/D — its `phase` string is `short-book-single-call` throughout. UI should special-case this.
+- The `__testClient` hook should NOT be removed until the e2e test infra is reworked. Production code never sets it; it's safe.
+- Wave 6B's `orchestrator-adapter.ts` declares a `reason: 'not-implemented'` case — my orchestrator never returns that. The adapter's `not-implemented` is a fallback path for when the orchestrator module can't be loaded; it's defensive but unreachable now that the orchestrator is in place.
