@@ -775,7 +775,7 @@ export async function findResumable(): Promise<ResumableSummary | null>
 
 ### Wave 7 — Deploy + README + cleanup complete (FINAL)
 
-**Commit SHA**: pending (filled in after `git commit`).
+**Commit SHA**: `f467aa1` (this log update lands in a follow-up commit on the same wave, to be amended-via-new-commit per repo policy).
 
 **Scope**: `.github/workflows/deploy.yml` verification (no changes needed — already had concurrency + `contents: write`), `vite.config.ts` (`manualChunks` + raised chunk-size warning), `src/pipeline/routes/route-shared.ts` (lazy-load `reconstructPdf`), `src/pipeline/index.ts` (drop `reconstructPdf` from barrel; keep type re-exports), `README.md` (full rewrite), and project-wide cleanup of `console.warn` calls in `src/pipeline/bracket-writer.ts`, `src/pipeline/phaseD-reconstruct/pdf-reflow.ts`, `src/state/db.ts` (+ matching test update in `tests/unit/pipeline/bracket-writer.test.ts`).
 
