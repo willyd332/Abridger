@@ -66,3 +66,47 @@ export type PhaseEvent =
   | { kind: 'phase-error'; phase: string; error: string; sectionId?: string }
 
 export type Emit = (event: PhaseEvent) => void
+
+export type MacroVerdict =
+  | 'KEEP_FULL'
+  | 'KEEP_PARTIAL'
+  | 'COMPRESS_TO_BRACKET'
+  | 'DROP_TO_ONE_LINE'
+
+export type BracketLengthHint = 'one-line' | 'short' | 'medium' | 'long'
+
+export type MacroDecision = {
+  sectionId: string
+  verdict: MacroVerdict
+  rationale: string
+  forwardDependencies: string[]
+  backwardDependencies: string[]
+  bracketLengthHint?: BracketLengthHint
+  confidence: number
+}
+
+export type MicroDeletionBracketHint = 'one-line' | 'short' | 'medium'
+
+export type MicroDeletion = {
+  startOffset: number
+  endOffset: number
+  containedBlockIds: string[]
+  dropRationale: string
+  bracketLengthHint: MicroDeletionBracketHint
+}
+
+export type MicroDeletionRejectionReason =
+  | 'splits-sentence'
+  | 'orphans-pronoun'
+  | 'crosses-protected-block'
+  | 'spans-multiple-paragraphs'
+  | 'out-of-bounds'
+
+export type MicroDecision = {
+  sectionId: string
+  deletions: MicroDeletion[]
+  rejectedDeletions: Array<{
+    proposed: MicroDeletion
+    reason: MicroDeletionRejectionReason
+  }>
+}
