@@ -21,8 +21,15 @@ These rules apply to every cut you make:
 
 Read the entire book, then produce:
 
-1. **Abridged text** (≈40% of the original length). Keep the most important passages verbatim; replace cuts with in-line editorial brackets in italic-style prose. Do not include the literal `[`/`]` characters in the abridged text — let the post-processor add them.
-2. **Ledger** — for each cut, record (a) where the cut occurred (free-text reference, e.g. "between paragraphs about X and Y"), (b) the replacement bracket text (no square brackets), and (c) a one-sentence rationale.
+1. **Abridged text** (≈40% of the original length). Keep the most important passages verbatim. Replace cuts with editorial brackets written as in-voice italic-style prose. **Wrap each bracket in `<<<BR>>>` … `<<</BR>>>` sentinels** so the post-processor can style brackets distinctly. The sentinels are NOT the literal `[` `]` characters and they are NOT visible to the reader — the post-processor renders the wrapped span as a styled aside with `[ ]` framing.
+
+   Example fragment of valid output:
+
+   > The famine of 1959 began in Anhui province. <<<BR>>>The chapter then traces grain procurement quotas through three case studies, ending with the 84 million tonne figure that anchors later analyses.<<</BR>>> By the spring of 1960, conditions had worsened.
+
+2. **Ledger** — for each bracketed passage in the abridged text, record (a) where the cut occurred (free-text reference, e.g. "between the chapters on famine onset and political response"), (b) the replacement bracket text **without the sentinels and without literal `[`/`]`**, and (c) a one-sentence rationale.
+
+The number of entries in `ledger` MUST equal the number of `<<<BR>>>…<<</BR>>>` regions in `abridged`. The bracket text in each ledger entry MUST match the corresponding sentinel-wrapped span exactly.
 
 ## Input
 
@@ -34,11 +41,11 @@ Return strictly valid JSON. No prose, no markdown fences, no commentary. Schema:
 
 ```json
 {
-  "abridged": "<the abridged text as one long string; paragraphs separated by \\n\\n; editorial brackets inline as italicized prose>",
+  "abridged": "<the abridged text with kept passages verbatim and brackets wrapped in <<<BR>>>…<<</BR>>>>",
   "ledger": [
     {
       "cutLocation": "<free-text reference describing where this cut sits in the book>",
-      "replacementBracket": "<the bracket text without square brackets>",
+      "replacementBracket": "<the bracket text without sentinels and without square brackets>",
       "rationale": "<one sentence on why this cut serves the reading purpose>"
     }
   ]

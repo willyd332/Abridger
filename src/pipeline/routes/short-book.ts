@@ -3,7 +3,12 @@ import { z } from 'zod'
 import { getPrompt } from '@/llm/prompts/loader'
 import type { Block, ParsedBook } from '@/parsers/types'
 
+import {
+  buildAbridgedEpubFromText,
+  parseAbridgedSegments,
+} from '@/pipeline/phaseD-reconstruct/epub'
 import { buildLedger } from '@/pipeline/phaseD-reconstruct/ledger'
+import { reconstructPdf } from '@/pipeline/phaseD-reconstruct/pdf-reflow'
 import type {
   CanonicalPassage,
   MacroDecision,
@@ -53,31 +58,42 @@ export type ShortBookOptions = {
 function syntheticSpine(book: ParsedBook, purpose: string): NarrativeSpine {
   return {
     centralArgument: `Short-book single-pass abridgement for: ${purpose || '(no purpose given)'}`,
-    narrativeShape: book.title ? `Single-pass abridgement of "${book.title}".` : 'Single-pass short-book abridgement.',
+    narrativeShape: book.title
+      ? `Single-pass abridgement of "${book.title}".`
+      : 'Single-pass short-book abridgement.',
     recurringMotifs: ['(short-book: motifs not extracted)', '(short-book: motifs not extracted)'],
     voiceAnchors: [],
   }
 }
 
-function syntheticSection(book: ParsedBook): Section {
-  const blocks: Block[] = book.pages.flatMap((p) => p.blocks)
+function syntheticSection(book: ParsedBook, rawText: string): Section {
+  const blocks: Block[] = [
+    {
+      id: 'short-book-body-001',
+      text: rawText,
+      classification: 'body',
+      pageNumber: book.pages[0]?.number ?? 1,
+    },
+  ]
   return {
     id: 'sec-short-book-001',
     order: 1,
-    title: book.title || 'Abridged book',
+    title: book.title ?? 'Abridged book',
     startPage: book.pages[0]?.number ?? 1,
     endPage: book.pages[book.pages.length - 1]?.number ?? 1,
     blocks,
-    rawText: book.rawText,
+    rawText,
     source: 'llm-detected',
     confidence: 1,
     summary: 'Whole-book single-pass abridgement.',
-    voiceSample: book.rawText.slice(0, 240),
+    voiceSample: rawText.slice(0, 240),
   }
 }
 
-function abridgedBlob(text: string): Blob {
-  return new Blob([text], { type: 'text/markdown' })
+function strippedAbridgedText(abridged: string): string {
+  return abridged
+    .replace(/<<<BR>>>/g, '')
+    .replace(/<<<\/BR>>>/g, '')
 }
 
 export async function executeShortBookRoute(
@@ -92,18 +108,9 @@ export async function executeShortBookRoute(
   const prompt = getPrompt('short-book')
   const user = [
     `Reading purpose: ${ctx.purpose}`,
-    book(ctx),
+    bookMetadata(ctx),
     'Abridge to ~40% of original length. Preserve voice, named entities, and quotes. Emit JSON only.',
   ].join('\n')
-
-  const section = syntheticSection(ctx.book)
-  await sectionsStore.create({
-    runId: ctx.runId,
-    sectionId: section.id,
-    order: section.order,
-    section,
-    phaseStatus: defaultSectionPhaseStatus(),
-  })
 
   const result = await ctx.client.callWithBookContent({
     role: prompt.meta.role,
@@ -136,10 +143,22 @@ export async function executeShortBookRoute(
     throw new Error(`Short-book JSON invalid: ${message}`)
   }
 
+  const segments = parseAbridgedSegments(parsed.abridged)
+  const visibleAbridged = strippedAbridgedText(parsed.abridged)
+
+  const section = syntheticSection(ctx.book, visibleAbridged)
+  await sectionsStore.create({
+    runId: ctx.runId,
+    sectionId: section.id,
+    order: section.order,
+    section,
+    phaseStatus: defaultSectionPhaseStatus(),
+  })
+
   const macroDecision: MacroDecision = {
     sectionId: section.id,
-    verdict: 'KEEP_PARTIAL',
-    rationale: `Short-book single-pass abridgement; ${parsed.ledger.length} editorial brackets.`,
+    verdict: 'KEEP_FULL',
+    rationale: `Short-book single-pass abridgement; ${parsed.ledger.length} editorial brackets inline.`,
     forwardDependencies: [],
     backwardDependencies: [],
     confidence: 0.9,
@@ -152,7 +171,6 @@ export async function executeShortBookRoute(
 
   const spine = syntheticSpine(ctx.book, ctx.purpose)
   const canonicalPassages: CanonicalPassage[] = []
-
   await spineStore.create({ runId: ctx.runId, spine, canonicalPassages })
 
   for (let i = 0; i < parsed.ledger.length; i += 1) {
@@ -168,16 +186,59 @@ export async function executeShortBookRoute(
     await eventsStore.append({
       runId: ctx.runId,
       timestamp: Date.now(),
-      event: { kind: 'phase-progress', phase: PHASE_NAME, completed: i + 1, total: parsed.ledger.length },
+      event: {
+        kind: 'phase-progress',
+        phase: PHASE_NAME,
+        completed: i + 1,
+        total: parsed.ledger.length,
+      },
     })
   }
 
-  await sectionsStore.update(ctx.runId, section.id, {
-    macroDecision,
-    microDecision,
-  })
+  await sectionsStore.update(ctx.runId, section.id, { macroDecision, microDecision })
 
-  const abridged = abridgedBlob(parsed.abridged)
+  const abridgedKind = ctx.book.format === 'pdf' ? 'abridged-pdf' : 'abridged-epub'
+  const abridgedMimeType = ctx.book.format === 'pdf' ? 'application/pdf' : 'application/epub+zip'
+
+  let abridgedBlob: Blob
+  let abridgedPages: number
+
+  if (ctx.book.format === 'pdf') {
+    const pdfResult = await reconstructPdf(
+      {
+        parsedBook: ctx.book,
+        sections: [section],
+        macroDecisions: [macroDecision],
+        microDecisions: [microDecision],
+        ctx: {
+          purpose: ctx.purpose,
+          spine,
+          canonicalPassages,
+          allSectionSummaries: [
+            {
+              id: section.id,
+              title: section.title,
+              order: section.order,
+              summary: section.summary,
+              signals: section.signals,
+            },
+          ],
+        },
+        client: ctx.client,
+      },
+      { emit, signal: ctx.signal },
+    )
+    abridgedBlob = pdfResult.abridgedBlob
+    abridgedPages = pdfResult.stats.abridgedPages
+  } else {
+    const epubResult = await buildAbridgedEpubFromText({
+      originalBlob: ctx.originalBlob,
+      parsedBook: ctx.book,
+      segments,
+    })
+    abridgedBlob = epubResult.abridgedBlob
+    abridgedPages = epubResult.stats.abridgedPages
+  }
 
   const run = await runsStore.get(ctx.runId)
   const totalCostUsd = run?.cost.billedUsd ?? 0
@@ -206,12 +267,11 @@ export async function executeShortBookRoute(
     originalFileName: opts.originalFileName,
   })
 
-  const abridgedKind = ctx.book.format === 'pdf' ? 'abridged-pdf' : 'abridged-epub'
   await outputsStore.create({
     runId: ctx.runId,
     kind: abridgedKind,
-    mimeType: 'text/markdown',
-    blob: abridged,
+    mimeType: abridgedMimeType,
+    blob: abridgedBlob,
     producedAt: Date.now(),
   })
   await outputsStore.create({
@@ -225,18 +285,19 @@ export async function executeShortBookRoute(
   emit({ kind: 'phase-end', phase: PHASE_NAME, durationMs: Date.now() - opts.startedAt })
 
   return {
-    abridgedBlob: abridged,
+    abridgedBlob,
     ledgerBlob: ledger.blob,
-    abridgedMimeType: 'text/markdown',
+    abridgedMimeType,
     ledgerMimeType: 'text/markdown',
     stats: {
       ...ledger.stats,
       ledgerEntries: parsed.ledger.length,
-      abridgedLengthChars: parsed.abridged.length,
+      abridgedLengthChars: visibleAbridged.length,
+      abridgedPages,
     },
   }
 }
 
-function book(ctx: RouteContext): string {
+function bookMetadata(ctx: RouteContext): string {
   return `Book metadata — title: "${ctx.book.title ?? ''}", author: "${ctx.book.author ?? ''}".`
 }

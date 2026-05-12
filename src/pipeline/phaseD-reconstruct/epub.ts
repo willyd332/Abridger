@@ -575,6 +575,153 @@ function bracketsForJob(
   return brackets.find((b) => b.sectionId === sectionId && b.deletionIndex === deletionIndex)
 }
 
+export type AbridgedSegment = { kind: 'kept' | 'bracket'; text: string }
+
+export type BuildAbridgedEpubInput = {
+  originalBlob: Blob
+  parsedBook: ParsedBook
+  segments: AbridgedSegment[]
+}
+
+export type BuildAbridgedEpubOutput = {
+  abridgedBlob: Blob
+  stats: {
+    originalPages: number
+    abridgedPages: number
+    bracketCount: number
+  }
+}
+
+const BRACKET_SENTINEL_PATTERN = /<<<BR>>>([\s\S]*?)<<<\/BR>>>/g
+
+export function parseAbridgedSegments(abridged: string): AbridgedSegment[] {
+  const segments: AbridgedSegment[] = []
+  let cursor = 0
+  const text = abridged
+  BRACKET_SENTINEL_PATTERN.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = BRACKET_SENTINEL_PATTERN.exec(text)) !== null) {
+    const matchStart = match.index
+    const matchEnd = matchStart + match[0].length
+    if (matchStart > cursor) {
+      const before = text.slice(cursor, matchStart).trim()
+      if (before.length > 0) segments.push({ kind: 'kept', text: before })
+    }
+    const inner = match[1].trim()
+    if (inner.length > 0) segments.push({ kind: 'bracket', text: inner })
+    cursor = matchEnd
+  }
+  if (cursor < text.length) {
+    const tail = text.slice(cursor).trim()
+    if (tail.length > 0) segments.push({ kind: 'kept', text: tail })
+  }
+  if (segments.length === 0 && text.trim().length > 0) {
+    segments.push({ kind: 'kept', text: text.trim() })
+  }
+  return segments
+}
+
+function splitParagraphs(text: string): string[] {
+  return text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+}
+
+function appendSegmentsToBody(doc: Document, body: Element, segments: AbridgedSegment[], title: string): void {
+  const heading = doc.createElement('h1')
+  heading.textContent = title
+  body.appendChild(heading)
+  for (const seg of segments) {
+    const paragraphs = splitParagraphs(seg.text)
+    if (paragraphs.length === 0) continue
+    if (seg.kind === 'bracket') {
+      const aside = doc.createElement('aside')
+      aside.setAttribute('class', 'abridger-bracket abridger-bracket--macro')
+      aside.setAttribute('role', 'note')
+      for (const p of paragraphs) {
+        const para = doc.createElement('p')
+        para.textContent = p
+        aside.appendChild(para)
+      }
+      body.appendChild(aside)
+    } else {
+      for (const p of paragraphs) {
+        const para = doc.createElement('p')
+        para.textContent = p
+        body.appendChild(para)
+      }
+    }
+  }
+}
+
+function replaceBodyWithSegments(doc: Document, segments: AbridgedSegment[], title: string): void {
+  const body = doc.body ?? doc.getElementsByTagName('body')[0]
+  if (!body) return
+  while (body.firstChild) body.removeChild(body.firstChild)
+  appendSegmentsToBody(doc, body, segments, title)
+}
+
+export async function buildAbridgedEpubFromText(
+  input: BuildAbridgedEpubInput,
+): Promise<BuildAbridgedEpubOutput> {
+  if (input.parsedBook.format !== 'epub') {
+    throw new Error('buildAbridgedEpubFromText: parsedBook.format must be "epub".')
+  }
+  const arrayBuffer = await blobToArrayBuffer(input.originalBlob)
+  const zip = await JSZip.loadAsync(arrayBuffer)
+
+  const opfPath = await findOpfPath(zip)
+  const opf = await readOpf(zip, opfPath)
+  const spineEntries = buildSpineEntries(opf, opfPath)
+  const originalSpineCount = spineEntries.length
+  if (spineEntries.length === 0) {
+    throw new Error('buildAbridgedEpubFromText: EPUB spine is empty.')
+  }
+
+  const cssHref = 'abridger.css'
+  const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/')) : ''
+  const cssZipPath = opfDir ? `${opfDir}/${cssHref}` : cssHref
+  ensureMetadataStylesheetEntry(opf, 'abridger-css', cssHref)
+  zip.file(cssZipPath, ABRIDGER_CSS)
+
+  const segments = input.segments
+  const bracketCount = segments.filter((s) => s.kind === 'bracket').length
+  const title = input.parsedBook.title?.trim() || 'Abridged'
+
+  const docCache: DocCache = new Map()
+  const serializer = getXmlSerializer()
+  for (let i = 0; i < spineEntries.length; i += 1) {
+    const entry = spineEntries[i]
+    const doc = await loadXhtml(zip, entry.path, docCache)
+    if (!doc) continue
+    if (i === 0) {
+      replaceBodyWithSegments(doc, segments, title)
+      injectStylesheetLink(doc, relativeStylePath(entry.href, cssHref))
+    } else {
+      replaceBodyWithEmptyComment(doc)
+    }
+  }
+  for (const [path, doc] of docCache.entries()) {
+    const serialized = serializer.serializeToString(doc)
+    zip.file(path, serialized)
+  }
+
+  const newOpfXml = serializer.serializeToString(opf.doc)
+  zip.file(opfPath, newOpfXml)
+
+  const abridgedBlob = await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' })
+
+  return {
+    abridgedBlob,
+    stats: {
+      originalPages: originalSpineCount,
+      abridgedPages: 1,
+      bracketCount,
+    },
+  }
+}
+
 export async function reconstructEpub(
   input: ReconstructEpubInput,
   opts: ReconstructEpubOptions = {},

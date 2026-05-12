@@ -299,6 +299,7 @@ describe('orchestrator: end-to-end with mocked LLM', () => {
     if (!completion.ok) return
     expect(completion.outputs.abridged).toBeInstanceOf(Blob)
     expect(completion.outputs.ledger).toBeInstanceOf(Blob)
+    expect(completion.outputs.abridgedMimeType).toBe('application/epub+zip')
 
     const run = await runsStore.get(result.handle.runId)
     expect(run?.status).toBe('done')
