@@ -12,7 +12,7 @@ export function AncientLibraryShell({
   statusMessage,
 }: AncientLibraryShellProps) {
   return (
-    <div className="shell-page hidden md:block">
+    <div className="shell-page">
       <div className="shell-texture" aria-hidden="true" />
       <div className="shell-content">
         <header className="shell-header">

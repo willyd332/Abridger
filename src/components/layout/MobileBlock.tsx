@@ -1,7 +1,7 @@
 export function MobileBlock() {
   return (
     <aside
-      className="mobile-block md:hidden"
+      className="mobile-block"
       role="alert"
       aria-live="assertive"
     >
