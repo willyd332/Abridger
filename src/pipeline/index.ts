@@ -38,3 +38,17 @@ export type { PhaseC15Options } from './phaseC15-sanity'
 
 export { phaseC2Micro } from './phaseC2-micro'
 export type { PhaseC2Options } from './phaseC2-micro'
+
+export { writeBracket, extractNamedTerms } from './bracket-writer'
+export type { BracketRequest, BracketResult, BracketUsage } from './bracket-writer'
+
+export { getPrecedingContext, getFollowingContext } from './bracket-helpers'
+
+export { reconstructEpub } from './phaseD-reconstruct/epub'
+export type {
+  ReconstructEpubInput,
+  ReconstructEpubOptions,
+  ReconstructEpubOutput,
+  ReconstructEpubStats,
+  ReconstructedBracket,
+} from './phaseD-reconstruct/epub'

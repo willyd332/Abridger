@@ -534,3 +534,46 @@ const { markdown, blob, filename, stats } = buildLedger({
 - The render is pure synthesis — no LLM calls, no I/O. Safe to call from the main thread; ~10ms for a typical-sized book.
 - If Wave 5B (PDF recon) wants to embed a "Cuts in this run" appendix inside the PDF itself, it can re-use the same `LedgerInput` shape and call `buildLedger` to get the markdown, then render-as-text.
 - The fixture in the test uses 3 sections (KEEP_FULL / KEEP_PARTIAL with 2 cuts / DROP_TO_ONE_LINE) — close to the wave-prompt-specified shape; numbers are verified by hand in the test comments.
+
+### Wave 5A — Bracket-writer + EPUB recon complete
+
+**Scope**: `src/pipeline/bracket-writer.ts`, `src/pipeline/bracket-helpers.ts`, `src/pipeline/phaseD-reconstruct/epub.ts`, `src/llm/prompts/bracket-writer.md`, `src/pipeline/index.ts` (exports), `tests/unit/pipeline/{bracket-writer,bracket-helpers,phaseD-epub}.test.ts`. Ran in parallel with Wave 5C (ledger). No file conflicts.
+
+**Build / lint / test (full tree)**
+
+- `npm run build` → green (tsc -b + vite, 333.73 kB JS / 30.16 kB CSS).
+- `npm run lint` → clean (zero warnings, zero errors).
+- `npm run test` → 172 passed (20 files). Wave 5A adds 13 + 8 + 5 = 26 new tests on top of Wave 5C's 14, bringing the suite from 132 → 172.
+
+**Files added**
+
+- `src/pipeline/bracket-writer.ts` — `writeBracket(request, client, opts?)`. Uses `client.callWithBookContent` with the `bracket-writer` prompt (smart role, temperature 0.5, json). Length budgets: `one-line` 10-40 / `short` 40-150 / `medium` 150-500 / `long` 500-1500 tokens. Auto-extracts proper nouns (regex, cap 20), 4-digit years, and quoted strings via exported `extractNamedTerms`. Retry-once-then-truncate semantics: if response > 5× word budget, retry with strict instruction; if still over, truncate to budget and emit `console.warn`. JSON parse failures bubble through the same retry/fallback path.
+- `src/pipeline/bracket-helpers.ts` — `getPrecedingContext(section, charOffset, paragraphs=1)` and `getFollowingContext(...)`. Walks paragraph boundaries (`\n\s*\n`), trims trailing/leading whitespace, clamps to 600 chars. Used by EPUB recon to feed surrounding paragraphs to the bracket-writer for micro cuts.
+- `src/llm/prompts/bracket-writer.md` — full prompt replacing the Wave 2B stub. Encodes the cross-cutting rules (abridge ≠ summarize, preserve nouns/dates/numbers/quotes, asymmetric loss, mimic voice, name the rhetorical function), explicit length-budget table, no-bracket-wrappers-in-output rule, and the untrusted-`<book_content>` clause. JSON response shape `{"bracketText": "..."}`.
+- `src/pipeline/phaseD-reconstruct/epub.ts` — `reconstructEpub(input, opts?)`. Reads `originalBlob` with `blob.arrayBuffer()` (with FileReader fallback for jsdom Blob), opens via JSZip, parses container.xml + OPF, walks the spine. For COMPRESS_TO_BRACKET / DROP_TO_ONE_LINE sections it replaces the entire body of the first spine item with a macro `<aside class="abridger-bracket abridger-bracket--macro">` and replaces subsequent spine items' bodies with `<!-- abridged into preceding section -->`. For KEEP_* sections with `MicroDecision.deletions` it resolves each deletion's `containedBlockIds` to DOM elements via the parser's `domPath` (XPath-like `/html[1]/body[1]/p[N]`) and replaces the contiguous range with a micro `<aside>`. Injects an `abridger.css` file (scoped, parchment-tinted aside styling, gilt left border) into the OPF folder; adds a manifest entry; injects a `<link rel="stylesheet">` in each touched XHTML's `<head>`. EPUB 2 and EPUB 3 both supported via the `<package version="...">` value (the OPF write keeps the original version unchanged). Bracket-writer calls run via `mapWithLimit` (default concurrency 3).
+- `src/pipeline/index.ts` — exports `writeBracket`, `extractNamedTerms`, `BracketRequest`, `BracketResult`, `BracketUsage`, `getPrecedingContext`, `getFollowingContext`, `reconstructEpub`, plus the EPUB recon types.
+
+**Public API contracts for Wave 5B (PDF recon)**
+
+- `writeBracket(request, client, opts?)` is reusable verbatim from PDF recon — it doesn't depend on EPUB structure. PDF recon should slice the deleted-text span from `Section.rawText` (or rebuild from blocks), call `getPrecedingContext` / `getFollowingContext` on the surrounding section text, pick a `targetLength` from `MacroDecision.bracketLengthHint` or `MicroDeletion.bracketLengthHint`, and call `writeBracket` with `scope: 'macro' | 'micro'`. The returned `BracketResult.text` is bracket text WITHOUT `[...]` wrappers; the renderer adds them.
+- `getPrecedingContext` and `getFollowingContext` are also reusable from PDF recon. They are pure functions over `Section.rawText`.
+
+**Deviations from the Wave 5A prompt**
+
+1. **Bracket-writer's "max 5× overshoot" check is word-count based, not token-count based.** The plan said "5× over the token budget"; without a JS-side tokenizer that exactly matches Anthropic/OpenAI, I use word count against the budget's `approxMaxWords` (which itself is ~75% of the token budget). This is consistent across providers and matches the human-facing "respond with at most N words" strict-retry instruction.
+2. **Length overshoot warnings go through `console.warn`, not the `Emit` callback.** `writeBracket` doesn't take an `Emit` (it's called per-deletion, not per-phase); the warning path is `console.warn` with the requestId tagged. Phase D's caller can wrap and re-emit if it wants finer-grained reporting.
+3. **Auto-extracted proper nouns include both single capitalized words (`Sichuan`) and multi-word names (`Mao Zedong`)** via `\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b`. Counted as separate entries up to a cap of 20 unique proper-noun strings, plus 10 years, plus 5 quoted strings.
+4. **EPUB micro-cut DOM resolution uses `containedBlockIds` (from `MicroDecision`) rather than re-deriving from byte offsets.** Wave 4's note explicitly recommends this path: byte offsets are into the *annotated* text with `<<<PROTECTED:id>>>` fences and are unsafe for EPUB DOM splicing. `containedBlockIds` cleanly maps to the parser's `Block.domPath` XPath.
+5. **The "abridgedPages" stat is a count of remaining spine items**, not pages-as-rendered-in-a-reader. EPUB spine items are not 1:1 with rendered pages (a single XHTML file may render as many printed pages); this is the same proxy used in the parser-side `pageNumber = spine index`. UI should label this as "chapters/sections" rather than "pages".
+6. **The Wave 2B `bracket-writer.md` stub had `responseFormat: text`**; I changed it to `json` to match the Zod-parsed `{"bracketText": ...}` contract. Same pattern as Wave 3's `narrative-spine.md` change.
+7. **Added a `FileReader` fallback** in `blobToArrayBuffer` because jsdom's `Blob` doesn't implement `arrayBuffer()`. The fallback only fires under test (real browser Blobs implement it). Symmetric helper added to the test file for reading the produced Blob back.
+8. **No second-pass orphan loop in `reconstructEpub`.** An earlier draft had a defensive "ensure all bracketed spine entries are serialized" loop after the main pass; on review it's dead code since the first pass already loads + caches + serializes every spine doc it touches.
+
+**Notes for downstream waves**
+
+- `BracketResult.usage` is per-call cost; Wave 6 should sum these into the run-level `CostCeiling.billedUsd`. The cost is already committed to the `LLMClient`'s `CostMeter` (because `writeBracket` calls go through `client.callWithBookContent`), so the run-level meter is already correct; the per-bracket usage is exposed only for reporting / ledger purposes.
+- The macro-scope bracket replaces the first spine item's body fully and replaces subsequent spine items' bodies with an HTML comment. If a section spans 5 spine items, you'll see `1 bracketed page + 4 nearly-empty pages` in the output — by design (so the EPUB's spine count and TOC stay intact, and the bracket is reachable from the TOC).
+- For multi-spine-item macro sections, the test fixture uses 1-spine-item-per-section, so the multi-spine path is structurally implemented but not unit-tested. Wave 7 / a manual smoke on a real book should validate.
+- The `abridger.css` is placed beside the OPF (e.g., `OEBPS/abridger.css`); the `<link href>` in each XHTML is computed relative to the spine item's href (so spine items in subfolders get the right relative path).
+- The bracket-writer prompt is voice-mimicking by design; quality depends heavily on `voiceSample` quality. Wave 3's Phase B guarantees `voiceSample` is a verbatim 30-80 word passage from the section. If a section has no `voiceSample` (e.g., Phase B failed), recon falls back to `spine.voiceAnchors[0]` — Wave 3 guarantees at least one anchor.
+- If a future wave wants progress events for bracket-writer (per-bracket, not per-phase), the cleanest path is to thread an `Emit` through `BracketRequest` rather than via `opts` (which already carries metadata).
