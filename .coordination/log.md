@@ -221,3 +221,53 @@ Single API key input field. Auto-detect:
 - **Texture overlay.** `--shell-texture-opacity` is 0.07 (within the ≤8% budget). The texture div has `pointer-events: none` and `mix-blend-mode: multiply`. High-contrast theme zeroes it. If WCAG audits flag the multiply, drop opacity to 0.05.
 - **EB Garamond subsetting.** Cyrillic + Cyrillic-ext subsets are bundled but rarely used; if bundle size becomes a concern, switch the `@fontsource/eb-garamond/400.css` imports to `@fontsource/eb-garamond/latin-400.css` (Latin-only) to drop ~150 KB.
 - **`provider-detect.ts` is duplicated.** Both `src/lib/provider-detect.ts` (mine) and `src/llm/provider-detect.ts` (Wave 2B's) exist. Recommend a follow-up cleanup commit that deletes one and updates imports.
+
+### Wave 2B — LLM facade complete
+
+**Commit SHA**: pending (added below after `git commit`).
+
+**Files added (all within scope `src/llm/**` + `tests/unit/llm/**`)**
+
+- `src/llm/types.ts` — shared types (`CallOptions`, `CallResult`, `LLMError`, `Usage`, `RoleMapping`, etc.).
+- `src/llm/provider-detect.ts` — `detectProvider(key)` with prefix rules per plan.
+- `src/llm/pricing.ts` — per-model `inputPerMillion` / `outputPerMillion` table + `computeCostUsd()`. Fallback entry covers unknown model IDs (e.g. user override).
+- `src/llm/cost.ts` — `CostMeter` with `reserve` / `commit` / `cancel` and `BudgetExceededError`. Race-safe by design: `reserve` is synchronous; concurrent callers serialize through the microtask queue and the second exceeder rejects.
+- `src/llm/safety.ts` — `wrapBookContent` + `stripControlChars` (also strips Unicode bidi / format controls / BOM) + `UNTRUSTED_BOOK_CONTENT_SYSTEM_PROMPT`.
+- `src/llm/retry.ts` — `retryWithBackoff` + `computeBackoffMs` + `defaultSleep` (AbortSignal-aware). Honors `retryAfterMs` on `rate-limited`; non-retryable kinds short-circuit.
+- `src/llm/ratelimit.ts` — `parseRateLimitHeaders` for Anthropic + OpenAI (handles ISO timestamps, OpenAI compound durations like `1m30s`, and bare-seconds), `parseRetryAfterMs`, `RateLimitBucket.waitMs`, per-provider registry.
+- `src/llm/mock.ts` — `MockProvider` with `registerResponse(key, …)` (substring match across phase/requestId/sectionId/system/user), `registerMatcher(predicate)`, latency, abort, call counting, history.
+- `src/llm/anthropic.ts` — `createAnthropicAdapter({apiKey})` using `dangerouslyAllowBrowser: true`; uses `.withResponse()` so we capture rate-limit response headers.
+- `src/llm/openai.ts` — `createOpenAIAdapter({apiKey})` using `dangerouslyAllowBrowser: true`; maps `responseFormat` to OpenAI `response_format`, uses `max_completion_tokens`.
+- `src/llm/client.ts` — `LLMClient` facade: role→model lookup, default mapping per plan, `setModelForRole(provider, role, modelId)`, `reserve→call→commit/cancel` flow, rate-bucket-aware dispatch with retry, `callWithBookContent({...opts, bookContent})` that prepends `UNTRUSTED_BOOK_CONTENT_SYSTEM_PROMPT` and wraps the text, `useMockProvider()` toggle, error classification via SDK error shape (`status`/`headers`).
+- `src/llm/prompts/loader.ts` — uses `import.meta.glob('./*.md', { query: '?raw', import: 'default', eager: true })`, `gray-matter` for front-matter, validates `{role, temperature, responseFormat}`. Includes a defensive `Buffer` shim so gray-matter's `toBuffer(content)` no-ops in the browser (it only writes the buffer to a non-enumerable `.orig` we never read).
+- `src/llm/prompts/*.md` — 8 placeholder stubs with YAML front-matter. Roles tuned per the plan's Default Models table (`structure`/`canonical-passages` = cheap; `summarize`/`narrative-spine`/`micro-filter`/`bracket-writer` = smart; `macro-filter`/`sanity-pass` = reasoning). Temperatures: low for structured-output prompts, higher for narrative-spine + bracket-writer.
+- `src/llm/index.ts` — barrel.
+- `tests/unit/llm/{provider-detect,cost,safety,retry,mock}.test.ts` — 51 LLM tests; full suite = 61 tests passing.
+
+**Sanity check (all from repo root)**
+
+- `npm run test` → 61 passed (7 files).
+- `npm run build` → `tsc -b` clean, Vite bundle 333.56 kB / 106.16 kB gzip.
+- `npm run lint` → clean (no warnings, no errors).
+
+**Resolves Wave 2A's noted issue**
+
+- Wave 2A flagged a `ContentBlock[] vs AnthropicContentBlock[]` build error. Fixed in this wave by typing `extractText` against a structural `{type: string}` filter rather than the SDK's `ContentBlock` union. Build is green.
+
+**Deviations from the prompt (with reasons)**
+
+1. **OpenAI `max_completion_tokens` over `max_tokens`.** The current OpenAI SDK marks `max_tokens` as deprecated in favor of `max_completion_tokens`; o1/o3 reasoning models require it. Behavior matches the prompt's intent.
+2. **Buffer polyfill in `prompts/loader.ts`.** `gray-matter` calls `Buffer.from(content)` to populate a non-enumerable `.orig` we never use. In the browser there is no Node Buffer, so we install a no-op `Buffer.from = (x) => x` if `globalThis.Buffer` is undefined. Tests run under jsdom which gets the real Node `Buffer`, so they exercise the real code path.
+3. **`stripControlChars` is a code-point loop, not a regex.** The plan-style regex `[\x00-\x08…]` would have to live in a literal; we also wanted to strip Unicode bidi/format controls (RLO/LRO/PDI/BOM) which are well-known prompt-injection vectors. The cost is negligible — book content gets stripped once per call.
+4. **Provider auto-detection is loosened to also accept legacy `sk-…` keys** (i.e. any `sk-` that isn't `sk-ant-`). The plan said exactly this; just noting it because a stricter reading would limit OpenAI to `sk-proj-…`.
+5. **OpenAI `o3` / `o3-mini`-aware fallback is NOT yet wired.** The plan's "prefer o3 if available via models.list" is a Wave 3 concern (it requires a live network probe). Pricing entries for both are present; only the default mapping points to `o1` for now.
+6. **No live `models.list` call inside `LLMClient` to validate keys.** That belongs in the UI intake (Wave 2 UI shell agent's territory), not the facade.
+
+**Notes for Wave 3+**
+
+- The facade returns a `CallResult` union (`ok: true | false`). Don't `throw` from a phase function on a recoverable LLM error — branch on `result.ok` and surface to the orchestrator so cost meter / state machine stay in sync.
+- `client.callWithBookContent({...opts, bookContent})` is the only correct way to send book text. Don't manually concat untrusted text into `user`.
+- `LLMClient.fromApiKey(key, ceilingUsd)` is the convenience constructor for Wave 2's UI intake — it does provider detection internally and throws on unrecognized keys.
+- `client.useMockProvider()` swaps the adapter in place; the rest of the dispatch path (cost meter, retries, rate-limit bucket) still runs. Use the returned `MockProvider` to register canned responses for fixture tests.
+- Each prompt file's front-matter (`role`, `temperature`, `responseFormat`) is meant to be the source of truth; Wave 3 phase functions should call `getPrompt('structure').meta.role` and pass that role into the client.
+- If Wave 3 hits 429s in practice, look at `RateLimitBucket` thresholds (`DEFAULT_THRESHOLDS`); they're conservative right now (≥2 requests, ≥1000 tokens).
