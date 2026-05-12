@@ -1,16 +1,17 @@
 import { useId, useMemo, useState } from 'react'
 import { Pill } from '@/components/ui/Pill'
-import { detectProvider, type ProviderId } from '@/lib/provider-detect'
+import { detectProvider } from '@/llm/provider-detect'
+import type { Provider } from '@/llm/types'
 
 interface ApiKeyInputProps {
   apiKey: string
   storeLocally: boolean
   onApiKeyChange: (key: string) => void
   onStoreLocallyChange: (store: boolean) => void
-  onProviderChange: (provider: ProviderId) => void
+  onProviderChange: (provider: Provider | null) => void
 }
 
-function providerLabel(provider: ProviderId): string {
+function providerLabel(provider: Provider | null): string {
   if (provider === 'anthropic') return 'Anthropic'
   if (provider === 'openai') return 'OpenAI'
   return 'Unrecognized'
@@ -27,15 +28,14 @@ export function ApiKeyInput({
   const inputId = useId()
   const storeId = useId()
 
-  const provider = useMemo(() => detectProvider(apiKey), [apiKey])
+  const provider = useMemo(() => detectProvider(apiKey).provider, [apiKey])
 
   const handleChange = (value: string) => {
     onApiKeyChange(value)
-    onProviderChange(detectProvider(value))
+    onProviderChange(detectProvider(value).provider)
   }
 
-  const pillTone =
-    provider === 'unknown' ? 'muted' : provider === 'anthropic' ? 'success' : 'success'
+  const pillTone = provider === null ? 'muted' : 'success'
 
   return (
     <div>
@@ -99,7 +99,7 @@ export function ApiKeyInput({
             fontStyle: 'italic',
           }}
         >
-          {provider === 'unknown' && apiKey.length > 0
+          {provider === null && apiKey.length > 0
             ? 'That prefix is unrecognized. Use an Anthropic (sk-ant-…) or OpenAI (sk-…) key.'
             : 'Detected from the key prefix.'}
         </span>

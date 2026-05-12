@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Pill } from '@/components/ui/Pill'
 import { ApiKeyInput } from '@/components/upload/ApiKeyInput'
-import type { ProviderId } from '@/lib/provider-detect'
+import type { Provider } from '@/llm/types'
 import { FileDropzone } from '@/components/upload/FileDropzone'
 import { PurposePrompt } from '@/components/upload/PurposePrompt'
 import {
@@ -30,7 +30,7 @@ const MIN_PURPOSE_CHARS = 12
 export function IntakeScreen({ onBegin }: IntakeScreenProps) {
   const [file, setFile] = useState<File | null>(null)
   const [apiKey, setApiKey] = useState('')
-  const [provider, setProvider] = useState<ProviderId>('unknown')
+  const [provider, setProvider] = useState<Provider | null>(null)
   const [storeKeyLocally, setStoreKeyLocally] = useState(false)
   const [purpose, setPurpose] = useState('')
   const reduced = useReducedMotion()
