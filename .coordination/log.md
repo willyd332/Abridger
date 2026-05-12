@@ -224,7 +224,7 @@ Single API key input field. Auto-detect:
 
 ### Wave 2B — LLM facade complete
 
-**Commit SHA**: pending (added below after `git commit`).
+**Commit SHA**: `f9cd4cc` (feature commit). This SHA-update lands in a follow-up `chore(wave-2b)` commit on top.
 
 **Files added (all within scope `src/llm/**` + `tests/unit/llm/**`)**
 
