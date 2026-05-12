@@ -1,11 +1,22 @@
+@import '@fontsource/eb-garamond/400.css';
+@import '@fontsource/eb-garamond/400-italic.css';
+@import '@fontsource/eb-garamond/500.css';
+@import '@fontsource/eb-garamond/600.css';
+@import '@fontsource/eb-garamond/700.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   --parchment-bg: #f5ecd6;
+  --parchment-bg-deep: #ecdfb8;
   --ink-fg: #2a1810;
+  --ink-fg-soft: #5a4634;
   --gilt: #b8860b;
+  --gilt-soft: #d8aa28;
+  --texture-opacity: 0.07;
+  --shell-max-width: 1180px;
 }
 
 html,
@@ -14,12 +25,24 @@ body,
   height: 100%;
 }
 
+html {
+  font-size: 16px;
+}
+
 body {
   background-color: var(--parchment-bg);
   color: var(--ink-fg);
   font-family:
     'EB Garamond', Garamond, 'Adobe Garamond Pro', Sabon,
     'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+  font-size: 1rem;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: 3px;
+  border-radius: 2px;
 }

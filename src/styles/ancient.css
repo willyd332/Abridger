@@ -1,1 +1,591 @@
-/* Ancient-library theme details land in Wave 2's UI shell task. */
+/* Ancient-library theme tokens, textures, and decorative primitives. */
+
+:root {
+  --shell-bg: #f5ecd6;
+  --shell-bg-edge: #e0cf99;
+  --shell-ink: #2a1810;
+  --shell-ink-soft: #5a4634;
+  --shell-ink-faint: #7d6650;
+  --shell-gilt: #b8860b;
+  --shell-gilt-soft: #d8aa28;
+  --shell-gilt-deep: #705208;
+  --shell-rule: rgba(42, 24, 16, 0.18);
+  --shell-paper-shadow: 0 1px 0 rgba(255, 245, 220, 0.6) inset,
+    0 18px 40px -28px rgba(42, 24, 16, 0.45);
+  --shell-card-bg: #faf2dc;
+  --shell-card-bg-hover: #fff7df;
+  --shell-texture-url: url('/textures/paper-grain.svg');
+  --shell-texture-opacity: 0.07;
+  --shell-radius: 6px;
+  --shell-radius-lg: 12px;
+}
+
+.theme-high-contrast {
+  --shell-bg: #ffffff;
+  --shell-bg-edge: #f3f3f3;
+  --shell-ink: #0a0a0a;
+  --shell-ink-soft: #1a1a1a;
+  --shell-ink-faint: #333333;
+  --shell-gilt: #6b4a00;
+  --shell-gilt-soft: #6b4a00;
+  --shell-gilt-deep: #3d2b00;
+  --shell-rule: rgba(0, 0, 0, 0.55);
+  --shell-card-bg: #ffffff;
+  --shell-card-bg-hover: #f7f7f7;
+  --shell-texture-opacity: 0;
+}
+
+.theme-high-contrast,
+.theme-high-contrast body {
+  background-color: var(--shell-bg);
+  color: var(--shell-ink);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+}
+
+.theme-high-contrast .shell-texture {
+  display: none;
+}
+
+/* Shell layout primitives */
+
+.shell-page {
+  position: relative;
+  min-height: 100vh;
+  background-color: var(--shell-bg);
+  color: var(--shell-ink);
+  isolation: isolate;
+}
+
+.shell-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(255, 240, 200, 0.6) 0%,
+      rgba(245, 236, 214, 0) 60%
+    ),
+    radial-gradient(
+      circle at 100% 100%,
+      rgba(184, 134, 11, 0.08) 0%,
+      rgba(245, 236, 214, 0) 55%
+    );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.shell-texture {
+  position: fixed;
+  inset: 0;
+  background-image: var(--shell-texture-url);
+  background-size: 240px 240px;
+  background-repeat: repeat;
+  opacity: var(--shell-texture-opacity);
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  z-index: 0;
+}
+
+.shell-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.shell-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 1.75rem 2.5rem 1.25rem;
+  border-bottom: 1px solid var(--shell-rule);
+  letter-spacing: 0.04em;
+}
+
+.shell-header__title {
+  font-family:
+    'EB Garamond', Garamond, 'Adobe Garamond Pro', Sabon, 'Cormorant Garamond',
+    Georgia, 'Times New Roman', serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--shell-ink);
+}
+
+.shell-header__subtitle {
+  font-style: italic;
+  font-size: 0.95rem;
+  color: var(--shell-ink-soft);
+}
+
+.shell-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 2rem 2.5rem 3rem;
+  max-width: var(--shell-max-width);
+  width: 100%;
+  margin: 0 auto;
+}
+
+.shell-footer {
+  padding: 1.25rem 2.5rem 1.75rem;
+  border-top: 1px solid var(--shell-rule);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--shell-ink-soft);
+  font-size: 0.875rem;
+}
+
+.shell-footer__note {
+  max-width: 38rem;
+  line-height: 1.5;
+}
+
+/* Cards / panels */
+
+.parchment-card {
+  position: relative;
+  background-color: var(--shell-card-bg);
+  border: 1px solid var(--shell-rule);
+  border-radius: var(--shell-radius-lg);
+  padding: 1.5rem 1.5rem 1.25rem;
+  box-shadow: var(--shell-paper-shadow);
+  transition: background-color 240ms ease, border-color 240ms ease;
+}
+
+.parchment-card__title {
+  font-family:
+    'EB Garamond', Garamond, 'Adobe Garamond Pro', Sabon, 'Cormorant Garamond',
+    Georgia, 'Times New Roman', serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--shell-ink);
+  margin: 0 0 0.5rem;
+}
+
+.parchment-card__hint {
+  font-size: 0.85rem;
+  color: var(--shell-ink-faint);
+  font-style: italic;
+  margin: 0 0 0.875rem;
+}
+
+/* Buttons */
+
+.gilt-button {
+  --gilt-button-bg: transparent;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.4rem;
+  background-color: var(--gilt-button-bg);
+  color: var(--shell-ink);
+  border: 1px solid var(--shell-gilt);
+  border-radius: var(--shell-radius);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    transform 220ms ease,
+    background-color 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease;
+  box-shadow: 0 1px 0 rgba(255, 245, 220, 0.5) inset,
+    0 1px 0 rgba(42, 24, 16, 0.04);
+}
+
+.gilt-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--shell-gilt-soft);
+  box-shadow:
+    0 1px 0 rgba(255, 245, 220, 0.6) inset,
+    0 6px 14px -10px rgba(184, 134, 11, 0.55);
+}
+
+.gilt-button--primary {
+  --gilt-button-bg: #faf2dc;
+  border-color: var(--shell-gilt);
+}
+
+.gilt-button--primary[data-glow='true'] {
+  box-shadow:
+    0 0 0 1px var(--shell-gilt-soft) inset,
+    0 0 22px -6px rgba(184, 134, 11, 0.65);
+}
+
+.gilt-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.gilt-button--ghost {
+  background-color: transparent;
+  border-color: var(--shell-rule);
+  color: var(--shell-ink-soft);
+}
+
+@keyframes candle-flicker {
+  0%, 100% { opacity: 1; }
+  20% { opacity: 0.965; }
+  45% { opacity: 1; }
+  70% { opacity: 0.98; }
+}
+
+.gilt-button[data-flicker='true']:not(:disabled) {
+  animation: candle-flicker 5.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gilt-button[data-flicker='true'] {
+    animation: none;
+  }
+}
+
+/* Pills */
+
+.gilt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid var(--shell-rule);
+  background-color: rgba(255, 247, 223, 0.7);
+  color: var(--shell-ink-soft);
+}
+
+.gilt-pill--success {
+  border-color: var(--shell-gilt);
+  color: var(--shell-gilt-deep);
+  background-color: rgba(244, 224, 138, 0.45);
+}
+
+.gilt-pill--warn {
+  border-color: rgba(184, 134, 11, 0.4);
+  color: var(--shell-ink-soft);
+  background-color: rgba(244, 224, 138, 0.25);
+}
+
+.gilt-pill--muted {
+  border-style: dashed;
+  color: var(--shell-ink-faint);
+  background-color: transparent;
+}
+
+/* Illuminated drop-cap (use sparingly: Cover + Result only). */
+
+.drop-cap::first-letter {
+  font-family:
+    'EB Garamond', Garamond, 'Adobe Garamond Pro', Sabon, 'Cormorant Garamond',
+    Georgia, 'Times New Roman', serif;
+  font-size: 4.6em;
+  font-weight: 600;
+  float: left;
+  line-height: 0.85;
+  margin: 0.05em 0.12em 0 0;
+  color: var(--shell-gilt-deep);
+  text-shadow:
+    1px 1px 0 rgba(255, 245, 215, 0.7),
+    -1px -1px 0 rgba(112, 82, 8, 0.15);
+}
+
+.theme-high-contrast .drop-cap::first-letter {
+  color: var(--shell-ink);
+  text-shadow: none;
+}
+
+/* Decision badges — shape AND color, per accessibility plan. */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--shell-ink);
+  border: 1px solid var(--shell-rule);
+  box-sizing: border-box;
+}
+
+.badge--keep {
+  background-color: var(--shell-gilt-soft);
+  border-color: var(--shell-gilt-deep);
+  border-radius: 9999px;
+  color: var(--shell-ink);
+}
+
+.badge--partial {
+  background-color: #eac84b;
+  border-color: var(--shell-gilt-deep);
+  border-radius: 3px;
+}
+
+.badge--bracket {
+  background-color: var(--shell-ink);
+  border-color: var(--shell-ink);
+  color: #faf2dc;
+  transform: rotate(45deg);
+  border-radius: 2px;
+}
+
+.badge--bracket > span {
+  display: inline-block;
+  transform: rotate(-45deg);
+  line-height: 1;
+}
+
+.badge--drop {
+  background-color: transparent;
+  border-style: dashed;
+  border-color: var(--shell-ink-faint);
+  color: var(--shell-ink-faint);
+  border-radius: 9999px;
+  opacity: 0.7;
+}
+
+/* Dropzone visual flourishes (parchment corner curls on hover). */
+
+.dropzone {
+  position: relative;
+  border: 1.5px dashed var(--shell-rule);
+  border-radius: var(--shell-radius-lg);
+  padding: 1.6rem 1.25rem;
+  background-color: rgba(255, 247, 223, 0.5);
+  transition:
+    border-color 220ms ease,
+    background-color 220ms ease,
+    transform 220ms ease;
+  cursor: pointer;
+  text-align: center;
+}
+
+.dropzone:hover,
+.dropzone[data-active='true'] {
+  border-color: var(--shell-gilt);
+  background-color: rgba(244, 224, 138, 0.3);
+}
+
+.dropzone::before,
+.dropzone::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid transparent;
+  opacity: 0;
+  transition: opacity 220ms ease, border-color 220ms ease;
+  pointer-events: none;
+}
+
+.dropzone::before {
+  top: -1px;
+  left: -1px;
+  border-top-color: var(--shell-gilt);
+  border-left-color: var(--shell-gilt);
+  border-top-left-radius: var(--shell-radius-lg);
+}
+
+.dropzone::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom-color: var(--shell-gilt);
+  border-right-color: var(--shell-gilt);
+  border-bottom-right-radius: var(--shell-radius-lg);
+}
+
+.dropzone:hover::before,
+.dropzone:hover::after,
+.dropzone[data-active='true']::before,
+.dropzone[data-active='true']::after {
+  opacity: 1;
+}
+
+/* Inputs */
+
+.parchment-input,
+.parchment-textarea {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--shell-rule);
+  border-radius: var(--shell-radius);
+  background-color: rgba(255, 250, 232, 0.7);
+  color: var(--shell-ink);
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.55;
+  transition: border-color 200ms ease, background-color 200ms ease;
+}
+
+.parchment-input:focus,
+.parchment-textarea:focus {
+  outline: none;
+  border-color: var(--shell-gilt);
+  background-color: #fff;
+}
+
+.parchment-textarea {
+  min-height: 8.5rem;
+  resize: vertical;
+  background-image: linear-gradient(
+    rgba(184, 134, 11, 0) 0,
+    rgba(184, 134, 11, 0) calc(1.55em - 1px),
+    rgba(184, 134, 11, 0.08) calc(1.55em - 1px),
+    rgba(184, 134, 11, 0.08) 1.55em
+  );
+  background-size: 100% 1.55em;
+  background-attachment: local;
+}
+
+.theme-high-contrast .parchment-textarea {
+  background-image: none;
+}
+
+/* Wax-seal counter */
+
+.wax-seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 30% 30%, #b22, #6f1818);
+  color: #fff7df;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid #4a0f0f;
+  box-shadow: 0 1px 0 rgba(255, 245, 220, 0.4) inset,
+    0 2px 4px rgba(42, 24, 16, 0.25);
+}
+
+.theme-high-contrast .wax-seal {
+  background: #0a0a0a;
+  color: #fff;
+  border-color: #0a0a0a;
+}
+
+/* Intake triptych */
+
+.triptych {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 1100px) {
+  .triptych {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Cover */
+
+.cover-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1rem;
+  text-align: center;
+  flex: 1 1 auto;
+}
+
+.cover-title {
+  font-family:
+    'EB Garamond', Garamond, 'Adobe Garamond Pro', Sabon, 'Cormorant Garamond',
+    Georgia, 'Times New Roman', serif;
+  font-size: clamp(2.6rem, 5vw, 4rem);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--shell-ink);
+  margin: 0 0 0.5rem;
+}
+
+.cover-subtitle {
+  font-style: italic;
+  font-size: 1.1rem;
+  color: var(--shell-ink-soft);
+  max-width: 32rem;
+  margin: 0 auto 2.5rem;
+}
+
+.cover-book {
+  width: clamp(180px, 22vw, 260px);
+  height: auto;
+  margin-bottom: 2.25rem;
+}
+
+/* Mobile block */
+
+.mobile-block {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--shell-bg);
+  color: var(--shell-ink);
+  padding: 2rem;
+  text-align: center;
+}
+
+.mobile-block__title {
+  font-family:
+    'EB Garamond', Garamond, 'Adobe Garamond Pro', Sabon, 'Cormorant Garamond',
+    Georgia, 'Times New Roman', serif;
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.mobile-block__body {
+  max-width: 26rem;
+  color: var(--shell-ink-soft);
+  line-height: 1.55;
+}
+
+/* Helpers */
+
+.sr-only-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.divider-rule {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--shell-rule),
+    transparent
+  );
+  margin: 1.5rem 0;
+}
