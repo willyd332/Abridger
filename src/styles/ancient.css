@@ -574,6 +574,50 @@
   line-height: 1.55;
 }
 
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background-color: rgba(20, 14, 6, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.welcome-overlay__card {
+  max-width: 38rem;
+  width: 100%;
+  padding: 2.25rem 2.5rem;
+  background-color: var(--shell-bg);
+  color: var(--shell-ink);
+  border: 1px solid var(--gilt-border, #b8860b);
+  box-shadow: 0 24px 60px -20px rgba(20, 14, 6, 0.45);
+}
+
+.welcome-overlay__title {
+  font-family:
+    'EB Garamond', Garamond, 'Adobe Garamond Pro', Sabon, 'Cormorant Garamond',
+    Georgia, 'Times New Roman', serif;
+  font-size: 2rem;
+  margin: 0 0 1rem 0;
+  letter-spacing: 0.02em;
+}
+
+.welcome-overlay__body {
+  color: var(--shell-ink-soft);
+  line-height: 1.6;
+  margin: 0 0 1rem 0;
+  font-size: 1.02rem;
+}
+
+.welcome-overlay__actions {
+  margin-top: 1.5rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* Helpers */
 
 .sr-only-live {

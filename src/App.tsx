@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { AncientLibraryShell } from '@/components/layout/AncientLibraryShell'
-import { Cover } from '@/components/layout/Cover'
 import { MobileBlock } from '@/components/layout/MobileBlock'
+import { WelcomeOverlay } from '@/components/layout/WelcomeOverlay'
 import { IntakeScreen, type IntakeParams } from '@/components/upload/IntakeScreen'
 import { PipelineView } from '@/components/pipeline/PipelineView'
 import { ResumePrompt } from '@/components/pipeline/ResumePrompt'
@@ -27,7 +27,7 @@ import {
 } from '@/components/pipeline/orchestrator-adapter'
 import type { RunStats } from '@/components/results/StatsRibbon'
 
-type Stage = 'cover' | 'cover-opening' | 'intake' | 'running' | 'done' | 'errored'
+type Stage = 'intake' | 'running' | 'done' | 'errored'
 
 const DEFAULT_MODEL_MAPPING: Record<Provider, ModelMapping> = {
   anthropic: {
@@ -55,7 +55,7 @@ function describeError(result: Extract<StartRunResult, { ok: false }>): string {
 }
 
 function App() {
-  const [stage, setStage] = useState<Stage>('cover')
+  const [stage, setStage] = useState<Stage>('intake')
   const [resumable, setResumable] = useState<ResumableRunSummary | null>(null)
   const [showResume, setShowResume] = useState(false)
   const [resumeRunId, setResumeRunId] = useState<string | null>(null)
@@ -134,14 +134,6 @@ function App() {
           setStage('errored')
         })
     }
-  }, [])
-
-  const handleBeginCover = useCallback(() => {
-    setStage((current) => (current === 'cover' ? 'cover-opening' : current))
-  }, [])
-
-  const handleCoverOpened = useCallback(() => {
-    setStage('intake')
   }, [])
 
   const handleIntakeBegin = useCallback(
@@ -229,7 +221,7 @@ function App() {
     if (unsubRef.current) unsubRef.current()
     unsubRef.current = null
     setStats(null)
-    setStage('cover')
+    setStage('intake')
     setStatusMessage('')
     setErrorMessage('')
     setResumeRunId(null)
@@ -260,6 +252,7 @@ function App() {
     <>
       <MobileBlock />
       <AncientLibraryShell statusMessage={statusMessage}>
+        <WelcomeOverlay />
         {showResume && resumable ? (
           <ResumePrompt
             summary={resumable}
@@ -268,9 +261,7 @@ function App() {
           />
         ) : null}
 
-        {stage === 'intake' ? (
-          <IntakeScreen onBegin={handleIntakeBegin} />
-        ) : stage === 'running' ? (
+        {stage === 'running' ? (
           <PipelineView
             modelMapping={modelMapping}
             onPause={handlePause}
@@ -287,11 +278,7 @@ function App() {
         ) : stage === 'errored' ? (
           <ErrorPanel message={errorMessage} onStartOver={handleStartOver} />
         ) : (
-          <Cover
-            isOpening={stage === 'cover-opening'}
-            onBegin={handleBeginCover}
-            onAnimationComplete={handleCoverOpened}
-          />
+          <IntakeScreen onBegin={handleIntakeBegin} />
         )}
       </AncientLibraryShell>
     </>
