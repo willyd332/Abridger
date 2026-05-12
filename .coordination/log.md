@@ -170,3 +170,54 @@ Single API key input field. Auto-detect:
 - **Memory budget**: PDFs over ~200 pages will still spend nontrivial RAM during parse (we release pages as we go but `extractions` holds all `rawBlocks` in memory). If you observe pressure on huge books, the right fix is to write extraction results to IndexedDB page-by-page during the loop rather than accumulate in an array — leave that to the state-persistence agent if it becomes necessary.
 - **Build error in Wave 2's LLM facade**: `src/llm/anthropic.ts` has a TS error (`ContentBlock[]` vs `AnthropicContentBlock[]`) that breaks `npm run build`. This is in the LLM agent's owned paths, not mine. My `src/parsers/**` and `tests/unit/parsers/**` pass `tsc --noEmit` clean in isolation. Wave 3 (LLM) should fix that on the next pass before the next full build.
 
+### Wave 2C — UI shell complete
+
+**Commit SHA**: `9de9b97` (feat(ui): ancient-library shell + cover + intake screen).
+
+**Build/lint status (in isolation, with `src/llm/**` stashed aside)**
+
+- `npm run build` → green. Vite 6, ~734ms, ~333 KB JS bundle, ~30 KB CSS, plus subsetted EB Garamond woff/woff2 files emitted to `dist/assets/`.
+- `npm run lint` → green (zero warnings, zero errors across my files).
+- Full-tree `npm run build` is RED only because of Wave 2B's `src/llm/anthropic.ts` and `src/llm/openai.ts` (both still untracked at the time of my commit; will land in Wave 2B's commit). Once those compile, the full-tree build is green.
+
+**Files committed (18)**
+
+- `src/styles/globals.css` — fontsource imports for EB Garamond (400/400-italic/500/600/700); base sizing (16 px / 1.65 line-height); CSS custom props; `:focus-visible` gilt ring.
+- `src/styles/ancient.css` — full theme: tokens, `.shell-*` layout primitives, `.parchment-card`, `.gilt-button` (with `[data-flicker]` CSS keyframe + `prefers-reduced-motion` override), `.gilt-pill`, `.drop-cap::first-letter`, decision badges (`.badge--keep` gold disc, `.badge--partial` amber square, `.badge--bracket` ink diamond with rotated inner span for legible glyph, `.badge--drop` faded dashed outline), dropzone w/ corner-curl pseudo-elements, parchment input + textarea (textarea has ruled-paper background-image), `.wax-seal` counter, triptych grid (3-col ≥1100px, stacked under), cover, mobile-block, and `.theme-high-contrast` overrides (white bg, near-black ink, system sans, texture hidden).
+- `public/textures/paper-grain.svg` — SVG fractalNoise tile, ink-toned via colour matrix; CSS uses it at 7% opacity with `mix-blend-mode: multiply` and `pointer-events: none`.
+- `src/lib/a11y.ts` — `useReducedMotion()` hook, `HighContrastMode` type + `readStoredTheme`/`writeStoredTheme`/`applyThemeToDocument` (localStorage key `abridger.theme`, document-level `theme-high-contrast` class), `ariaLiveProps()`, `visuallyHiddenStyle()`.
+- `src/lib/motion-presets.ts` — `coverOpenVariants` (rotateY -110°, 1.1 s, ink-flow easing), `coverOpenReducedVariants` (250 ms fade), `gentlePulseVariants` (1.012× scale, gilt glow, 4.2 s loop), `candleFlickerVariants` (kept for non-button use; CSS animation is the actual mechanism for buttons), `fadeInVariants` + `intakeStaggerTransition` (0.12 s stagger across the triptych), `chooseVariants(reduced, full, fallback)` helper.
+- `src/lib/provider-detect.ts` — pure `detectProvider(rawKey)` → `'anthropic' | 'openai' | 'unknown'`. Shared with Wave 2B's LLM facade (which has its own `src/llm/provider-detect.ts` — see deviations).
+- `src/components/ui/Button.tsx` — `<Button variant primary|ghost flicker glow disabled aria-label …>`. Forwards ref. `glow` ⇒ `data-glow="true"` triggers gilt halo. `flicker` ⇒ `data-flicker="true"` triggers CSS `candle-flicker` keyframe; `@media (prefers-reduced-motion: reduce)` disables it.
+- `src/components/ui/Pill.tsx` — `<Pill tone="neutral|success|warn|muted" ariaLabel>`.
+- `src/components/ui/Card.tsx` — `<Card title hint as>` parchment-card primitive.
+- `src/components/ui/ThemeToggle.tsx` — toggles `theme-high-contrast` class on `<html>`; persists to localStorage. `aria-pressed`, dynamic `aria-label`.
+- `src/components/layout/MobileBlock.tsx` — replaces Wave 1's simple block. `role="alert"`, `aria-live="assertive"`. Hidden ≥ md (`md:hidden`).
+- `src/components/layout/AncientLibraryShell.tsx` — fixed parchment background, fixed texture overlay div, header with title + "EST. MMXXVI" lockup, main, footer with security note + `<ThemeToggle/>`. ARIA-live region (`sr-only-live`) ready for Wave 6 to push status text via the `statusMessage` prop.
+- `src/components/layout/Cover.tsx` — full-page section, 3D perspective, inline SVG closed-book illustration (leather spine + gilt borders + diamond emblem + "A B R I D G E R" foil text). `motion.section` with `coverOpenVariants` / reduced fallback; `motion.div` book with `gentlePulseVariants`. "Begin" `<Button flicker glow>`. Fires `onAnimationComplete` only when the `'opening'` definition resolves.
+- `src/components/upload/FileDropzone.tsx` — react-dropzone wrapper. Accepts PDF + EPUB only, max 250 MB. Shows pill + filename + human-readable size + "Remove" button when a file is selected. Surfaces rejection reasons (too-large, wrong-type) via a `role="alert"` line. Keyboard-accessible (`tabIndex=0`, role=button).
+- `src/components/upload/ApiKeyInput.tsx` — masked input with Show/Hide toggle, "Provider" pill driven by `detectProvider`, localStorage opt-in checkbox with explicit "any extension can read it" warning. `onProviderChange` is called on every keystroke so the parent can keep its provider state in sync.
+- `src/components/upload/PurposePrompt.tsx` — `.parchment-textarea` (with ruled-paper background-image), wax-seal character counter (`aria-label="N of MAX characters used"`).
+- `src/components/upload/IntakeScreen.tsx` — triptych. Validates: file present, provider ∈ {anthropic, openai}, purpose ≥ 12 trimmed chars. "Still needed: …" hint when invalid. Static "Estimated cost: $—" pill (Wave 6 wires real estimation). `onBegin(params)` only fires when all three valid. Motion: staggered fade-in (skipped under reduced-motion).
+- `src/App.tsx` — three-state machine: `cover` → `cover-opening` → `intake`. `MobileBlock` and `AncientLibraryShell` are siblings; Tailwind `md:` switches between them. `handleIntakeBegin` is a no-op placeholder (`void params`) for Wave 6.
+
+**Deviations from the prompt**
+
+1. **Candle-flicker is CSS-keyframes, not motion-variants.** Spreading both `motion`'s props and `ButtonHTMLAttributes` on the same element fights with TS because of conflicting event-handler types (`onAnimationStart`, `onDrag*`, etc.). Using a CSS keyframe + a `@media (prefers-reduced-motion: reduce)` override keeps the button typed cleanly and behaves identically. The motion-presets file still exports `candleFlickerVariants` for any later use on non-`<button>` elements.
+2. **Closed-book SVG is inline** (in `Cover.tsx`) rather than under `public/`. Reasoning: it's a small primitive used in exactly one place, and inlining avoids a network round-trip + lets the gilt accents share the CSS variables for the high-contrast theme later if we want. If Wave 5/6 wants a separate result-screen book illustration, it can live under `public/`.
+3. **Extracted `detectProvider` + `ProviderId` to `src/lib/provider-detect.ts`** rather than re-exporting from `ApiKeyInput.tsx`. The `react-refresh/only-export-components` rule warned; more importantly, Wave 2B independently created `src/llm/provider-detect.ts` with the same function — Wave 3+ should consolidate these (suggest deleting one or having the LLM facade import from `@/lib/provider-detect`).
+4. **`@fontsource/eb-garamond` imported via CSS** in `globals.css` rather than copying woff files under `public/fonts/`. Vite emits hashed font files into `dist/assets/` at build time. This is what the prompt anticipated ("you can just import `@fontsource/eb-garamond` in `globals.css` — that's the cleanest path"); the `public/fonts/` directory exists but is empty. Note the EB Garamond subsets include Latin, Latin-ext, Cyrillic, and Cyrillic-ext — browsers will only download the subsets the user actually renders, so this is cheap.
+5. **Added an `eslint-config-allow-warnings` strategy implicitly** — `npm run lint` (`eslint .`) does NOT pass `--max-warnings 0`, so the project tolerates warnings. My files emit zero warnings either way; I'm noting this so a future agent doesn't tighten the lint command and inadvertently break the build on a transient warning.
+
+**Screenshots tip**
+
+- `npm run dev` then open `http://localhost:5173` on a desktop window (≥ md = 768 px). Click "Begin" to watch the cover-open page-turn into the triptych. Toggle the "High-contrast theme" button in the footer to verify the WCAG-AA fallback. Resize narrower than `md` to see the mobile hard-block.
+
+**Notes for later waves**
+
+- **Wave 6 hook-up:** `IntakeScreen` already exposes `onBegin({ file, key, provider, purpose, storeKeyLocally })`. `App.tsx` currently passes a no-op. Wave 6 should: (a) decide where to live (probably introduce a `'pipeline'` stage in `App.tsx`'s state machine and pass real handler), (b) wire the real cost estimator and replace the static "Estimated cost: $—" pill in `IntakeScreen.tsx`, (c) push phase-progress strings into `AncientLibraryShell`'s `statusMessage` prop — the ARIA-live region is already in place.
+- **Decision badges are CSS-only right now.** When Wave 4/5 builds the section grid, render `<span class="badge badge--keep">●</span>` / `<span class="badge badge--partial">▪</span>` / `<span class="badge badge--bracket"><span>◆</span></span>` / `<span class="badge badge--drop">○</span>`. The `--bracket` variant has a nested `<span>` because the outer rotates 45° and the inner counter-rotates so the glyph stays upright; if you'd rather use a pure SVG, the colors are still derivable from the CSS variables.
+- **Cover drop-cap.** `.drop-cap::first-letter` is intentionally only used on the cover h1 ("The Abridger" → big illuminated "T"). The plan says "drop-caps on Cover + Result only" — Wave 6's result screen should reuse the class.
+- **Texture overlay.** `--shell-texture-opacity` is 0.07 (within the ≤8% budget). The texture div has `pointer-events: none` and `mix-blend-mode: multiply`. High-contrast theme zeroes it. If WCAG audits flag the multiply, drop opacity to 0.05.
+- **EB Garamond subsetting.** Cyrillic + Cyrillic-ext subsets are bundled but rarely used; if bundle size becomes a concern, switch the `@fontsource/eb-garamond/400.css` imports to `@fontsource/eb-garamond/latin-400.css` (Latin-only) to drop ~150 KB.
+- **`provider-detect.ts` is duplicated.** Both `src/lib/provider-detect.ts` (mine) and `src/llm/provider-detect.ts` (Wave 2B's) exist. Recommend a follow-up cleanup commit that deletes one and updates imports.
