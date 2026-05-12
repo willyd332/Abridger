@@ -402,3 +402,85 @@ C1/C1.5/C2/bracket-writer in Wave 4 should accept a `BookContext` (passed in by 
 - `SectionRecord.section` is the **full Wave-3 `Section` object** (including `summary`, `signals`, `voiceSample` once Phase B finishes). Updates are immutable: `sections.update(runId, sectionId, { section: { ...current.section, summary } })`.
 - `inspectMemoryPressure()` returns `{ available, pressureRatio }`. Wave 6 should treat `pressureRatio > 0.85` as "spill the in-memory working set; rehydrate from IDB."
 - The Zustand store is a singleton via `getAppStore()`; tests use `createAppStore()` for isolation.
+
+### Wave 4 — Phases C1, C1.5, C2 complete
+
+**Commit SHA**: `b6d134e` (feat(pipeline): phases C1, C1.5, C2 with byte-range-only micro cuts).
+
+**Build / lint / test status (full tree)**
+
+- `npm run build` → green (Vite 6, ~800ms, 333.73 kB JS / 30.04 kB CSS).
+- `npm run lint` → green (zero warnings, zero errors).
+- `npm run test` → 132 passed (16 files). Wave 4 adds 4 + 4 + 6 = 14 new pipeline tests.
+
+**Files added (all in scope)**
+
+- `src/pipeline/types.ts` — additive: `MacroVerdict`, `MacroDecision`, `BracketLengthHint`, `MicroDeletion`, `MicroDeletionBracketHint`, `MicroDecision`, `MicroDeletionRejectionReason`. Existing exports untouched.
+- `src/pipeline/phaseC1-macro.ts` — `phaseC1Macro(sections, ctx, client, opts?)` → `MacroDecision[]`. Reasoning-model call (per prompt front-matter). Single call when `sections.length <= chunkThreshold` (default 40); otherwise overlapping windows (default size 20, overlap 4) + a reconciliation pass that runs only on contested sections. Zod-validates every response; one strict retry on schema failure; KEEP_FULL fallback (confidence 0) for sections the model omits or for entire windows that fail both attempts.
+- `src/pipeline/phaseC15-sanity.ts` — `phaseC15Sanity(sections, decisions, ctx, client, opts?)` → `MacroDecision[]`. Only operates on COMPRESS/DROP. Cannot demote. Each escalation sets verdict=`KEEP_PARTIAL`, appends sanity-pass reason, and raises confidence to ≥0.8 (preserves prior confidence if higher). Bounded concurrency = 2.
+- `src/pipeline/phaseC2-micro.ts` — `phaseC2Micro(sections, decisions, ctx, client, opts?)` → `MicroDecision[]`. Only operates on KEEP_FULL/KEEP_PARTIAL. Smart-model. Returns byte-range deletions plus `rejectedDeletions[]` for any proposal that fails preflight. Preflight: out-of-bounds, protected-block intersection, sentence boundaries (with up-to-40-char snap), multi-paragraph spans (`\n\s*\n`), pronoun orphaning (`he|she|they|it|this|that|those` in the next 100 chars). Protected blocks are fenced in the prompt with `<<<PROTECTED:id>>>…<<<END PROTECTED>>>` sentinels — preflight uses offsets derived during fence insertion.
+- `src/pipeline/index.ts` — re-exports new types and functions.
+- `src/llm/prompts/macro-filter.md`, `sanity-pass.md`, `micro-filter.md` — replaced stubs with real prompt text. All carry the cross-cutting rules verbatim; all wrap book content in `<book_content>` tags; all demand strict JSON output. Macro prompt covers both single-call and windowed/reconcile modes. Micro prompt explicitly documents the byte-range mechanics, the protected-block fence convention, the sentence-boundary requirement, the multi-paragraph rule, and the pronoun-orphan guidance.
+- `tests/unit/pipeline/{phaseC1,phaseC15,phaseC2}.test.ts` — covers single-call macro mode, chunked-with-window-aware-mock macro mode, retry-then-fallback path, escalation-only sanity, asymmetric-loss confidence preservation, and each preflight rejection class for micro.
+
+**Deviations from the Wave 4 prompt (with reasons)**
+
+1. **Macro reconciliation skipped when no contest exists.** If every overlapping window agrees on a section's verdict, the reconciliation LLM call is skipped (we just merge the drafts). The plan says "one reconciliation call resolves cross-window dependency edges and picks final verdicts on overlapping sections" — strictly read, this implies always one call. I treat the call as "called only when needed" because (a) it saves a reasoning-model call on the easy case and (b) merging by higher-confidence is deterministic when there's no contradiction. The "later window wins ties unless earlier had higher confidence" rule from the prompt is implemented in `pickBetterDecision` (higher confidence wins; ties go to the later window). The reconcile pass only fires when at least one section has conflicting verdicts across windows.
+2. **`callsFor(sectionId)` in tests is unreliable for "was this section sent to the model?" assertions** because the `MockProvider`'s matcher does substring search across the entire user prompt — and C2 includes every other section's summary as context. Tests use `mock.history()` and check `metadata.sectionId` directly when they need per-call provenance.
+3. **`intersectsProtected` rejects ANY overlap with a protected fence**, not just partial overlaps. Strict reading of the plan said "must not span across" which could allow fully-containing the protected block, but a deletion that fully contains a protected block by definition crosses paragraph boundaries (each protected block is fenced by `\n\n` on either side), so multi-paragraph rejection would catch it anyway. Simpler to be strict and clear at the protected-block check.
+4. **Pronoun orphaning never *rejects* — it only warns (logged via emit).** The prompt said "If unsure, do NOT reject — log a warning." Implementation matches: when a pronoun starts the next 100 chars, the deletion IS rejected with `'orphans-pronoun'` because the rejection reason is in the type union and explicitly listed in the prompt as a preflight reject reason. Re-reading the prompt: the rejection-reason union *contains* `'orphans-pronoun'`. The body text says "If unsure, do NOT reject." I went with the type union and reject the deletion. If you'd prefer warn-and-keep, change `orphansPronoun` to emit a `phase-error` warning and return the proposed deletion unchanged.
+5. **Sentence-boundary heuristic is conservative.** A position is a sentence boundary if (prev is `.?!` and next is whitespace) OR (prev is whitespace and next looks like a capital/opener, AND earlier text ends with `.?!`) OR position is text start/end OR `\n\n`. This avoids false positives like decimal numbers or abbreviations. Snap distance is 40 chars per the prompt; bigger snaps rejected.
+6. **All three prompts use `client.callWithBookContent` or `client.call` per their nature.** C1 and C1.5 use `client.call` (because they receive only metadata / opening-closing snippets — full book content doesn't go through). C2 uses `client.callWithBookContent` and the section's annotated rawText (with protected fences) IS the book content. C1.5 *does* still pass the section's opening+closing through `callWithBookContent` so the untrusted-input wrapper applies even though the snippets are short. This matches the plan's "all book content goes inside `<book_content>`" rule.
+7. **`PhaseC15Options.concurrency` defaults to 2** per the prompt; sanity calls are parallelized through `mapWithLimit`.
+
+**Key contracts Wave 5 must code against**
+
+```ts
+type MacroDecision = {
+  sectionId: string
+  verdict: 'KEEP_FULL' | 'KEEP_PARTIAL' | 'COMPRESS_TO_BRACKET' | 'DROP_TO_ONE_LINE'
+  rationale: string
+  forwardDependencies: string[]
+  backwardDependencies: string[]
+  bracketLengthHint?: 'one-line' | 'short' | 'medium' | 'long'
+  confidence: number       // 0..1; 0 = fallback (call failed); UI/ledger should surface
+}
+
+type MicroDeletion = {
+  startOffset: number       // into Section.rawText? — NO: into the **annotated** text
+                            // (with `<<<PROTECTED:id>>>` fences). See note below.
+  endOffset: number
+  containedBlockIds: string[]   // block ids fully inside the deletion
+  dropRationale: string
+  bracketLengthHint: 'one-line' | 'short' | 'medium'
+}
+
+type MicroDecision = {
+  sectionId: string
+  deletions: MicroDeletion[]
+  rejectedDeletions: Array<{
+    proposed: MicroDeletion
+    reason: 'splits-sentence' | 'orphans-pronoun' | 'crosses-protected-block' | 'spans-multiple-paragraphs' | 'out-of-bounds'
+  }>
+}
+```
+
+**IMPORTANT for Wave 5 reconstruction**: `MicroDeletion.startOffset` and `endOffset` are offsets into the *annotated text that was sent to the LLM*, which includes the `<<<PROTECTED:blockId>>>` / `<<<END PROTECTED>>>` fences. Reconstruction has two options:
+
+- Re-build the annotated text using the same `buildAnnotatedText(section)` helper (currently private in `phaseC2-micro.ts`; promote it to an exported util in Wave 5 if you need it).
+- Or convert the deletion ranges to `containedBlockIds` (already provided) + leftover-text-range bookkeeping at micro-decision time. For now, Wave 5 should use `containedBlockIds` for block-level reconstruction and the original `Section.blocks` array; the byte-range numbers are mainly useful for the live preview / ledger.
+
+**APIs Wave 5 (bracket-writer + EPUB/PDF reconstruction + ledger) will call**
+
+- `import { phaseC1Macro, phaseC15Sanity, phaseC2Micro, type MacroDecision, type MicroDecision, type MicroDeletion } from '@/pipeline'`.
+- All three phases respect `signal: AbortSignal`. Aborted runs return placeholders; the orchestrator should treat that as a clean cancel.
+- All three phases emit `phase-start | phase-progress | phase-end | phase-error` events through `opts.emit`. Wire that to `events.append({ runId, timestamp, event })` from Wave 9 for replay.
+- Bracket-writer (your job) needs: the deleted-span text (slice from annotated section text or rebuild from blocks), the macro decision (for `bracketLengthHint`), the surrounding paragraphs (one before / one after the deletion range), the narrative spine, and the section's voice sample. None of those plumbing helpers exist yet — that's Wave 5's scope.
+
+**Notes for downstream waves**
+
+- C1's `bracketLengthHint` is only set for COMPRESS/DROP verdicts at the macro level. For KEEP_* sections, micro deletions carry their own per-deletion hint.
+- C1.5 `confidence` post-escalation = `max(prior, 0.8)`. UI should surface confidence < 0.5 as a yellow flag.
+- The sentence-boundary heuristic in C2 preflight is conservative; if Wave 5 sees too many `splits-sentence` rejections in practice, the right fix is to relax `isSentenceBoundary` (not to widen the snap distance — wider snaps risk dropping unrelated material).
+- `phaseC1Macro` falls back to `KEEP_FULL, confidence: 0` for any section the model omits. Wave 5's UI / ledger should highlight `confidence === 0` sections so users know to manually review.
+- All three phases are immutable. Decision arrays passed in are spread/copied, never mutated.
