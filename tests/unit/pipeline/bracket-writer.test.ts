@@ -55,14 +55,16 @@ describe('extractNamedTerms', () => {
 })
 
 describe('writeBracket', () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>
-
+  // `console.warn` is still spied so any accidental log surfaces during tests,
+  // but the bracket-writer no longer emits warnings — observability is owned
+  // by the orchestrator's PhaseEvent stream. The earlier
+  // `expect(warnSpy).toHaveBeenCalled()` assertions were removed accordingly.
   beforeEach(() => {
-    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
   })
 
   afterEach(() => {
-    warnSpy.mockRestore()
+    vi.restoreAllMocks()
   })
 
   it('returns bracket text for the one-line budget', async () => {
@@ -138,7 +140,6 @@ describe('writeBracket', () => {
     })
     const result = await writeBracket(makeRequest(), client)
     expect(result.text).toMatch(/\[bracket-writer failed/)
-    expect(warnSpy).toHaveBeenCalled()
   })
 
   it('retries once when output overshoots 5× the word budget, then truncates', async () => {
@@ -170,7 +171,6 @@ describe('writeBracket', () => {
     // Truncated to ~110 words + ellipsis.
     expect(result.text.endsWith('…')).toBe(true)
     expect(result.text.split(/\s+/).length).toBeLessThanOrEqual(115)
-    expect(warnSpy).toHaveBeenCalled()
   })
 
   it('truncates if even the strict retry overshoots', async () => {

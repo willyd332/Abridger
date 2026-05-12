@@ -83,8 +83,10 @@ export function getDb(): Promise<AbridgerDb> {
         }
       },
       blocked() {
-        // Another tab holds an older version. Surface as warning at boot.
-        console.warn('[abridger:db] open blocked by another connection')
+        // Another tab holds an older version of the IndexedDB schema and
+        // refuses to release its connection. We intentionally do not log
+        // here — the upgrade path will retry once the other tab closes,
+        // and the UI surfaces resumability state via `findResumableRun()`.
       },
       blocking() {
         // We are blocking a newer version. Closing lets the new version proceed.

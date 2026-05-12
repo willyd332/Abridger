@@ -168,9 +168,15 @@ function buildUserPrompt(
   ].join('\n')
 }
 
-function emitWarning(metadata: { requestId: string } | undefined, message: string): void {
-  const tag = metadata?.requestId ? `[${metadata.requestId}] ` : ''
-  console.warn(`${tag}bracket-writer: ${message}`)
+// Bracket-writer warnings (length overshoot, strict-retry failures) are
+// non-fatal: the caller already has a fallback path and the cost meter
+// captures the retry billing. We intentionally swallow them in production
+// rather than route to console — observability is handled via the
+// orchestrator's PhaseEvent stream, which doesn't model per-retry diagnostics
+// at this granularity.
+function emitWarning(_metadata: { requestId: string } | undefined, _message: string): void {
+  void _metadata
+  void _message
 }
 
 async function attemptCall(

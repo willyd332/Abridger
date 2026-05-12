@@ -10,7 +10,7 @@ import {
   phaseC15Sanity,
   phaseC2Micro,
 } from '@/pipeline'
-import { reconstructEpub, reconstructPdf } from '@/pipeline'
+import { reconstructEpub } from '@/pipeline'
 import { buildLedger } from '@/pipeline/phaseD-reconstruct/ledger'
 
 import {
@@ -454,6 +454,9 @@ export async function runReconstruction(
     }
   }
 
+  // Lazy-load the PDF reconstructor — @react-pdf/renderer is the heaviest
+  // dependency in the pipeline, and books on the EPUB path never need it.
+  const { reconstructPdf } = await import('@/pipeline/phaseD-reconstruct/pdf-reflow')
   const result = await reconstructPdf(
     {
       parsedBook: ctx.book,

@@ -53,7 +53,10 @@ export type {
   ReconstructedBracket,
 } from './phaseD-reconstruct/epub'
 
-export { reconstructPdf } from './phaseD-reconstruct/pdf-reflow'
+// NOTE: `reconstructPdf` is intentionally NOT re-exported here. The PDF
+// reflow path pulls in @react-pdf/renderer (~2 MB), so it is lazy-imported
+// from `@/pipeline/phaseD-reconstruct/pdf-reflow` only when a run actually
+// produces a PDF. Importers should hit the module directly.
 export type {
   ReconstructPdfInput,
   ReconstructPdfOptions,

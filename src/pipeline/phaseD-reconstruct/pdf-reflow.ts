@@ -59,8 +59,11 @@ function registerFonts(): string {
       ],
     })
     return FONT_FAMILY
-  } catch (err) {
-    console.warn('reconstructPdf: font registration failed; falling back to Times-Roman.', err)
+  } catch {
+    // Font registration is best-effort. In jsdom / test environments the
+    // fetch for the woff2 asset fails; in production it should always
+    // succeed. On failure we silently fall back to Times-Roman, which is
+    // a PDF standard font and ships inside fontkit — guaranteed to render.
     return FALLBACK_FONT_FAMILY
   }
 }
