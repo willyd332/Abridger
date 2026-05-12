@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --parchment-bg: #f5ecd6;
+  --ink-fg: #2a1810;
+  --gilt: #b8860b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--parchment-bg);
+  color: var(--ink-fg);
+  font-family:
+    'EB Garamond', Garamond, 'Adobe Garamond Pro', Sabon,
+    'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
