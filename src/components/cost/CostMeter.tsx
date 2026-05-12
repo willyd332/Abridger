@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from 'motion/react'
+import { useShallow } from 'zustand/react/shallow'
 import {
   useAppStore,
   selectCostRemaining,
@@ -38,10 +39,10 @@ function formatUsd(n: number): string {
 
 export function CostMeter({ onPause, onResume, onCancel, runStatus }: CostMeterProps) {
   const reduced = useReducedMotion()
-  const cost = useAppStore((state) => state.cost)
+  const cost = useAppStore(useShallow((state) => state.cost))
   const remaining = useAppStore(selectCostRemaining)
   const currentPhase = useAppStore(selectCurrentPhase)
-  const progress = useAppStore(selectProgress)
+  const progress = useAppStore(useShallow(selectProgress))
 
   const used = cost.reservedUsd + cost.billedUsd
   const ratio = cost.ceilingUsd > 0 ? Math.min(1, used / cost.ceilingUsd) : 0

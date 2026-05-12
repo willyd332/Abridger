@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
+import { useShallow } from 'zustand/react/shallow'
 import {
   useAppStore,
   selectCurrentPhase,
@@ -42,8 +43,8 @@ export function PipelineView({
   onCancel,
 }: PipelineViewProps) {
   const reduced = useReducedMotion()
-  const sections = useAppStore(selectSections)
-  const inFlight = useAppStore(selectInFlightSections)
+  const sections = useAppStore(useShallow(selectSections))
+  const inFlight = useAppStore(useShallow(selectInFlightSections))
   const currentPhase = useAppStore(selectCurrentPhase)
   const runStatus = useAppStore((state) => state.job?.run.status)
 

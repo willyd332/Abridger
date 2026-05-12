@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useAppStore, selectSections, type SectionRecord } from '@/state'
 import { Button } from '@/components/ui/Button'
 
@@ -42,7 +43,7 @@ function truncate(text: string, max: number): string {
 }
 
 export function LivePreviewPane({ onCancel }: LivePreviewPaneProps) {
-  const sections = useAppStore(selectSections)
+  const sections = useAppStore(useShallow(selectSections))
 
   const previewSections = useMemo(() => {
     return sections

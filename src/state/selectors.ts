@@ -2,12 +2,15 @@ import type { AppState, JobView } from './store'
 import type { PhaseName, SectionRecord } from './types'
 import { PHASE_NAMES } from './types'
 
+const EMPTY_SECTIONS: SectionRecord[] = []
+const EMPTY_PROGRESS = { total: 0, done: 0, errored: 0, ratio: 0 }
+
 export function selectCurrentRun(state: AppState): JobView['run'] | null {
   return state.job?.run ?? null
 }
 
 export function selectSections(state: AppState): SectionRecord[] {
-  return state.job?.sections ?? []
+  return state.job?.sections ?? EMPTY_SECTIONS
 }
 
 export function selectCostRemaining(state: AppState): number {
@@ -55,7 +58,7 @@ export function selectProgress(state: AppState): {
 } {
   const sectionList = selectSections(state)
   if (sectionList.length === 0) {
-    return { total: 0, done: 0, errored: 0, ratio: 0 }
+    return EMPTY_PROGRESS
   }
   let done = 0
   let errored = 0

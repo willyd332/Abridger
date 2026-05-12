@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { AncientLibraryShell } from '@/components/layout/AncientLibraryShell'
 import { Cover } from '@/components/layout/Cover'
 import { MobileBlock } from '@/components/layout/MobileBlock'
@@ -66,7 +67,7 @@ function App() {
   const unsubRef = useRef<(() => void) | null>(null)
 
   const currentPhase = useAppStore(selectCurrentPhase)
-  const progress = useAppStore(selectProgress)
+  const progress = useAppStore(useShallow(selectProgress))
   const runRecord = useAppStore((state) => state.job?.run)
   const bookRecord = useAppStore((state) => state.job?.book)
 
