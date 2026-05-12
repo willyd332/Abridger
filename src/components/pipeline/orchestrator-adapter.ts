@@ -1,6 +1,12 @@
 import type { Provider } from '@/llm/types'
 import type { PhaseEvent } from '@/pipeline/types'
 import type { FrontBackMatterHandling } from '@/state'
+import type {
+  StartRunInput as OrchestratorStartRunInput,
+  StartRunResult as OrchestratorStartRunResult,
+  RunHandle as OrchestratorRunHandle,
+  RunCompletion as OrchestratorRunCompletion,
+} from '@/pipeline/orchestrator'
 
 export type StartRunInput = {
   file: File
@@ -13,9 +19,7 @@ export type StartRunInput = {
   password?: string
 }
 
-export type RunCompletion =
-  | { ok: true; outputs: { abridged: Blob; ledger: Blob; abridgedMimeType: string } }
-  | { ok: false; reason: string; message: string }
+export type RunCompletion = OrchestratorRunCompletion
 
 export type RunHandle = {
   runId: string
@@ -43,42 +47,30 @@ export type StartRunResult =
   | { ok: true; handle: RunHandle }
   | { ok: false; reason: StartRunReason; message: string }
 
-type OrchestratorModule = {
-  startRun?: (input: StartRunInput) => Promise<StartRunResult>
-  resumeRun?: (runId: string) => Promise<StartRunResult>
+function adaptHandle(h: OrchestratorRunHandle): RunHandle {
+  return {
+    runId: h.runId,
+    cancel: h.cancel,
+    pause: h.pause,
+    onEvent: h.onEvent,
+    result: h.result,
+  }
 }
 
-async function loadOrchestrator(): Promise<OrchestratorModule | null> {
-  try {
-    const mod = (await import('@/pipeline/orchestrator')) as OrchestratorModule
-    return mod
-  } catch {
-    return null
-  }
+function adaptResult(r: OrchestratorStartRunResult): StartRunResult {
+  if (r.ok) return { ok: true, handle: adaptHandle(r.handle) }
+  return { ok: false, reason: r.reason as StartRunReason, message: r.message }
 }
 
 export async function startRun(input: StartRunInput): Promise<StartRunResult> {
-  const mod = await loadOrchestrator()
-  if (!mod?.startRun) {
-    return {
-      ok: false,
-      reason: 'not-implemented',
-      message:
-        'The orchestrator is not yet wired into this build. Pipeline execution will start once Wave 6A lands.',
-    }
-  }
-  return mod.startRun(input)
+  const mod = await import('@/pipeline/orchestrator')
+  const orchestratorInput: OrchestratorStartRunInput = { ...input }
+  const result = await mod.startRun(orchestratorInput)
+  return adaptResult(result)
 }
 
 export async function resumeRun(runId: string): Promise<StartRunResult> {
-  const mod = await loadOrchestrator()
-  if (!mod?.resumeRun) {
-    return {
-      ok: false,
-      reason: 'not-implemented',
-      message:
-        'The orchestrator is not yet wired into this build. Resume will work once Wave 6A lands.',
-    }
-  }
-  return mod.resumeRun(runId)
+  const mod = await import('@/pipeline/orchestrator')
+  const result = await mod.resumeRun(runId)
+  return adaptResult(result)
 }
