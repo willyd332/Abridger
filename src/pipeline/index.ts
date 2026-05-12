@@ -52,3 +52,11 @@ export type {
   ReconstructEpubStats,
   ReconstructedBracket,
 } from './phaseD-reconstruct/epub'
+
+export { reconstructPdf } from './phaseD-reconstruct/pdf-reflow'
+export type {
+  ReconstructPdfInput,
+  ReconstructPdfOptions,
+  ReconstructPdfOutput,
+  ReconstructPdfStats,
+} from './phaseD-reconstruct/pdf-reflow'
