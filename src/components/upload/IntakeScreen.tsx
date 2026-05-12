@@ -19,6 +19,7 @@ export interface IntakeParams {
   provider: 'anthropic' | 'openai'
   purpose: string
   storeKeyLocally: boolean
+  costCeiling: number
 }
 
 interface IntakeScreenProps {
@@ -26,6 +27,7 @@ interface IntakeScreenProps {
 }
 
 const MIN_PURPOSE_CHARS = 12
+const DEFAULT_CEILING = 5
 
 export function IntakeScreen({ onBegin }: IntakeScreenProps) {
   const [file, setFile] = useState<File | null>(null)
@@ -33,20 +35,24 @@ export function IntakeScreen({ onBegin }: IntakeScreenProps) {
   const [provider, setProvider] = useState<Provider | null>(null)
   const [storeKeyLocally, setStoreKeyLocally] = useState(false)
   const [purpose, setPurpose] = useState('')
+  const [ceilingText, setCeilingText] = useState(String(DEFAULT_CEILING))
   const reduced = useReducedMotion()
 
+  const ceiling = Number.parseFloat(ceilingText)
+  const ceilingValid = Number.isFinite(ceiling) && ceiling > 0
   const purposeValid = purpose.trim().length >= MIN_PURPOSE_CHARS
   const keyValid = provider === 'anthropic' || provider === 'openai'
   const fileValid = file !== null
-  const allValid = purposeValid && keyValid && fileValid
+  const allValid = purposeValid && keyValid && fileValid && ceilingValid
 
   const missingHints = useMemo(() => {
     const items: string[] = []
     if (!fileValid) items.push('a book')
     if (!keyValid) items.push('a recognized API key')
     if (!purposeValid) items.push('a reading purpose')
+    if (!ceilingValid) items.push('a positive cost ceiling')
     return items
-  }, [fileValid, keyValid, purposeValid])
+  }, [fileValid, keyValid, purposeValid, ceilingValid])
 
   const handleBegin = useCallback(() => {
     if (!allValid || !file) return
@@ -57,8 +63,9 @@ export function IntakeScreen({ onBegin }: IntakeScreenProps) {
       provider,
       purpose: purpose.trim(),
       storeKeyLocally,
+      costCeiling: ceiling,
     })
-  }, [allValid, apiKey, file, onBegin, provider, purpose, storeKeyLocally])
+  }, [allValid, apiKey, ceiling, file, onBegin, provider, purpose, storeKeyLocally])
 
   return (
     <motion.div
@@ -137,16 +144,28 @@ export function IntakeScreen({ onBegin }: IntakeScreenProps) {
             flexWrap: 'wrap',
           }}
         >
-          <Pill tone="muted">Estimated cost: $—</Pill>
-          <span
+          <label
             style={{
-              fontSize: '0.85rem',
-              fontStyle: 'italic',
-              color: 'var(--shell-ink-faint)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.9rem',
+              color: 'var(--shell-ink-soft)',
             }}
           >
-            A real estimate appears once the press warms.
-          </span>
+            <span>Spending ceiling (USD):</span>
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              value={ceilingText}
+              onChange={(e) => setCeilingText(e.target.value)}
+              className="parchment-input"
+              style={{ width: '5.5rem', padding: '0.35rem 0.5rem' }}
+              aria-label="Spending ceiling in US dollars"
+            />
+          </label>
+          <Pill tone="muted">Estimate appears once the press warms.</Pill>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>

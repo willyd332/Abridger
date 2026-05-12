@@ -614,3 +614,50 @@ const { markdown, blob, filename, stats } = buildLedger({
 - The fonts directory exception: `public/fonts/eb-garamond-{regular,italic,bold}.woff2` are committed to the repo. They're ~22-23 kB each (latin subset, three weights), total ~67 kB added. Other waves should avoid touching them unless the wave specifically owns font assets.
 - If Wave 6 wants finer-grained progress events, the current implementation emits `phase-start` → `phase-progress` (per section, post-bracket-fill) → `phase-end`. Per-bracket progress would need threading `Emit` through `writeBracket` (see Wave 5A's note about this).
 - `pdf` from `@react-pdf/renderer` uses an internal React reconciler with a container; the call shape is `pdf().updateContainer(reactElement) → toBlob()`. We do NOT use the `<PDFDownloadLink>` / `<BlobProvider>` components because we want headless rendering inside the pipeline (no DOM mount required).
+
+### Wave 6B — Pipeline UI + cost meter + results complete
+
+**Scope**: `src/App.tsx`, new `src/components/pipeline/**`, `src/components/cost/CostMeter.tsx`, `src/components/results/**`, ceiling input on `src/components/upload/IntakeScreen.tsx` (added `costCeiling: number` to `IntakeParams`), plus ~600 lines of CSS in `src/styles/ancient.css` for cost-meter / section-card / pipeline-view / live-preview / results-screen / resume-prompt / book-spine / bindery-overlay. Ran in parallel with Wave 6A (orchestrator).
+
+**Sanity**
+
+- `npm run build` → clean. Bundle: `index-*.js` 374 kB, `orchestrator-*.js` 2.6 MB (Wave 6A's lazy chunk).
+- `npm run lint` → my files clean. The 8 lint errors that remain are all in `tests/unit/pipeline/orchestrator.test.ts` (Wave 6A's file).
+- `npm run test` → 185 passed, 5 failed; the 5 failures are all in `tests/unit/pipeline/orchestrator.test.ts` and `tests/unit/pipeline/routes/long-book.test.ts` (Wave 6A).
+
+**Files added (new)**
+
+- `src/components/pipeline/orchestrator-adapter.ts` — dynamic import wrapper around `@/pipeline/orchestrator`; tolerates the file not existing yet (returns `{ ok: false, reason: 'not-implemented' }`).
+- `src/components/pipeline/PageFlip.tsx` — `rotateY` -90→0 reveal motion wrapper, fade fallback under `useReducedMotion`.
+- `src/components/pipeline/BookSpine.tsx` — Phase A illustration: 24 dividers slide in over an inked spine SVG.
+- `src/components/pipeline/SectionCard.tsx` — per-section parchment card with status pill (pending/in_flight/done/error/skipped), `PageFlip`-wrapped body, shape+color decision badge using existing `.badge--keep/--partial/--bracket/--drop` classes, escalation marker after Phase C1.5, and model identity badge.
+- `src/components/pipeline/SectionGrid.tsx` — grid container; arrow-key navigation across focused cards; `[data-active='true']` highlight gilded.
+- `src/components/pipeline/PipelineView.tsx` — top-level layout: CostMeter ribbon, phase lede, BookSpine, SectionGrid + LivePreviewPane side panel, Phase D bindery overlay (the "binding" animation, one of the three big motion moments).
+- `src/components/pipeline/LivePreviewPane.tsx` — first 1-2 sections rendered with `<del>` for deletions and italic `[bracket]` insertions. Empty-state until orchestrator has data.
+- `src/components/pipeline/ResumePrompt.tsx` — "Resume previous run?" dialog shown when `findResumableRun()` returns a match.
+- `src/components/cost/CostMeter.tsx` — top ribbon: phase name, `{done}/{total}` progress bar, `$used / $ceiling`, soft-warning at 50% (gilt), 80% (amber-ish), hard-stop at >=100% (ink-red); Pause/Resume/Stop buttons. Hard-stop swaps Pause→Resume.
+- `src/components/results/ResultsScreen.tsx` — outer panel; loads `outputs.listByRun(runId)` from IDB.
+- `src/components/results/DownloadPanel.tsx` — gilt buttons that `URL.createObjectURL` the abridged file + ledger and trigger a hidden `<a download>` click.
+- `src/components/results/LedgerPreview.tsx` — first 600 chars in a parchment card with a "View full ledger" disclosure that reads the rest from the Blob.
+- `src/components/results/StatsRibbon.tsx` — illuminated-numeral cells: original pages, abridged pages, % reduction, tokens, total cost.
+
+**App.tsx state machine**
+
+`'cover' → 'cover-opening' → 'intake' → 'running' → 'done' | 'errored'`. On boot, `findResumableRun()` shows the `ResumePrompt` overlay before the cover; "Resume" calls `resumeRun(runId)`, "Discard" marks the run cancelled. `handleIntakeBegin` calls `adapterStartRun({...IntakeParams, frontBackMatterHandling: 'abridge'})` (the prompt allowed defaulting this) and attaches `handle.onEvent` to keep the Zustand store in sync via `refreshFromDB` on every `phase-progress` and `phase-end`. `handle.result` (Wave 6A's `Promise<RunCompletion>`) drives the final state transition into `'done'` and surfaces `RunStats`. Stop confirms via `window.confirm` and calls `handle.cancel()` + `store.cancelRun()`. Pause calls `handle.pause()` + `store.pauseRun()`.
+
+**Deviations from the Wave 6B prompt**
+
+1. **No separate `confirm-cost` panel.** Per the prompt's "you can also defer this for simplicity" option, I added a ceiling input directly to the IntakeScreen (`Spending ceiling (USD)`, default $5.00). The orchestrator's `estimateCost` guard at `startRun` returns `{ ok: false, reason: 'budget-too-low' }` which I surface as an error screen. The CostMeter ribbon shows live cost vs. ceiling once the run starts.
+2. **The orchestrator's `RunHandle.pause` returns `Promise<void>`** (not `void` as the spec listed). The adapter accepts `() => void | Promise<void>` so both shapes work.
+3. **No `handle.resume()` exists on Wave 6A's RunHandle.** Resume from a paused state currently calls `store.resumeRun(runId)` (which flips the DB record to `'in_progress'`) but doesn't re-spin orchestrator workflow loop. Cleanly resuming a paused run from the ribbon will need Wave 6A to add `resume` to `RunHandle`, OR a follow-up that calls `adapterResumeRun(runId)`. As-is, pause + resume via the ribbon flips the store status only; the workflow loop sees the new status via its own polling.
+4. **Section cards' "model identity" badge** is best-effort: derived by inspecting which phase has the latest activity for a section (`B → cheap`, `C1 / C2 / D → smart`, `C1.5 → reasoning`) and shortening the model name to Haiku/Sonnet/Opus/GPT-4o/etc. The plan asked for "transparent about which calls were cheap vs smart" — this delivers that signal without coupling tightly to orchestrator internals.
+5. **Live preview pane** reads `section.rawText` + `microDecision.deletions` to render `<del>`-struck text. It does NOT pull bracket text from the `brackets` IDB store yet (that's a one-call query but adds complexity; the orchestrator's per-section snapshots flow through `refreshFromDB` which already includes `microDecision`). If Wave 6A or a future wave wants bracket text inline, query `brackets.listBySection(runId, sectionId)` and pass to `LivePreviewPane`.
+6. **ARIA-live phase messages** are pushed to the existing `AncientLibraryShell` `statusMessage` prop on every phase/progress change.
+7. **Bounded concurrency animation**: `PipelineView` filters in-flight sections via `selectInFlightSections` and passes the first 4 IDs as `activeSectionIds` to `SectionGrid` — those cards get the gilt-glow `[data-active='true']` treatment.
+
+**API contract notes for Wave 6A coordination**
+
+- I assumed `RunHandle.onEvent` returns an unsubscribe function — confirmed against Wave 6A's `(listener) => listeners.add(listener)`, which returns the unsubscribe.
+- I assumed Wave 6A would call `publishJobToStore(runRecord)` early so `useAppStore` selectors light up — confirmed in `orchestrator.ts:311, 372`.
+- I assumed `phase-progress` / `phase-end` events fire frequently enough that `refreshFromDB` keeps the section grid lively. If the orchestrator's `executeRoute` emits only at phase boundaries, the per-section cards will visibly batch-update at phase ends. If a smoother UI is wanted, Wave 6A should add `phase-progress` per section update.
+- The `RunHandle` should ideally gain a `resume()` method that re-spins the workflow loop after a pause; currently pause+resume from the ribbon only flips the status flag.
