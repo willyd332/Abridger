@@ -271,3 +271,81 @@ Single API key input field. Auto-detect:
 - `client.useMockProvider()` swaps the adapter in place; the rest of the dispatch path (cost meter, retries, rate-limit bucket) still runs. Use the returned `MockProvider` to register canned responses for fixture tests.
 - Each prompt file's front-matter (`role`, `temperature`, `responseFormat`) is meant to be the source of truth; Wave 3 phase functions should call `getPrompt('structure').meta.role` and pass that role into the client.
 - If Wave 3 hits 429s in practice, look at `RateLimitBucket` thresholds (`DEFAULT_THRESHOLDS`); they're conservative right now (≥2 requests, ≥1000 tokens).
+
+### Wave 3 — Phases A, A.5, B, B.5 complete
+
+**Commit SHA**: `f83fa3b` (feat(pipeline): phases A, A.5, B, B.5 with mocked-LLM tests).
+
+**Build / lint / test status (full tree)**
+
+- `npm run build` → green (Vite 6, ~700ms, 333.73 kB JS / 30.01 kB CSS).
+- `npm run lint` → green (zero warnings, zero errors).
+- `npm run test` → 78 passed (11 files). Wave 3 adds 5 + 4 + 4 + 4 = 17 new pipeline tests.
+
+**Files added (all in scope)**
+
+- `src/pipeline/types.ts` — full type contracts for Wave 4+ (`Section`, `SectionSignals`, `NarrativeFunction`, `SectionDensity`, `SectionSource`, `CanonicalPassage`, `NarrativeSpine`, `BookContext`, `PhaseEvent`, `Emit`).
+- `src/pipeline/phaseA-structure.ts` — `phaseAStructure(book, client, opts?)` → `{ sections, source, warnings }`.
+- `src/pipeline/phaseA5-canonical.ts` — `phaseA5Canonical(book, client, opts?)` → `CanonicalPassage[]`.
+- `src/pipeline/phaseB-summarize.ts` — `phaseBSummarize(sections, purpose, client, opts?)` → `Section[]`.
+- `src/pipeline/phaseB5-spine.ts` — `phaseB5Spine(sections, purpose, canonicalPassages, client, opts?)` → `NarrativeSpine`.
+- `src/pipeline/index.ts` — barrel; Wave 4 should `import { phaseAStructure, phaseB5Spine, type Section, type BookContext } from '@/pipeline'`.
+- `src/lib/concurrency.ts` — `createLimit(max)` + `mapWithLimit(items, max, fn)` p-limit-style helpers.
+- `src/llm/prompts/{structure,canonical-passages,summarize,narrative-spine}.md` — replaced stubs with real prompt text. Each enforces the cross-cutting rules from the plan (ABRIDGE ≠ summarize, preserve nouns/dates/quotes, asymmetric loss, voice preservation, bidirectional dependencies). All four demand structured JSON output and treat `<book_content>` as untrusted.
+- `tests/unit/pipeline/{fixtures,phaseA,phaseA5,phaseB,phaseB5}.test.ts` — hand-crafted in-memory `ParsedBook` fixtures + canned mock responses.
+
+**Key contracts Wave 4 must code against**
+
+```ts
+type Section = {
+  id: string                     // stable; safe to use as IndexedDB key
+  order: number                  // 1-based
+  title: string
+  startPage: number              // inclusive
+  endPage: number                // inclusive
+  blocks: Block[]                // sliced from ParsedBook.pages
+  rawText: string                // body-only text
+  summary?: string               // populated after Phase B
+  signals?: SectionSignals       // populated after Phase B
+  voiceSample?: string           // 30-80 word verbatim sample, populated after Phase B
+  source: 'outline' | 'llm-detected' | 'spine' | 'fixed-window'
+  confidence: number
+}
+
+type BookContext = {
+  purpose: string                // user's reading purpose
+  spine: NarrativeSpine          // from Phase B.5
+  canonicalPassages: CanonicalPassage[]
+  allSectionSummaries: Array<Pick<Section,'id'|'title'|'order'|'summary'|'signals'>>
+}
+
+type NarrativeSpine = {
+  centralArgument: string        // ~150 words
+  narrativeShape: string         // ~100 words
+  recurringMotifs: string[]      // 2–10 short phrases
+  voiceAnchors: string[]         // 1–4 verbatim 30–80-word passages, all verified against section text
+}
+```
+
+C1/C1.5/C2/bracket-writer in Wave 4 should accept a `BookContext` (passed in by the orchestrator) and use `LLMClient.callWithBookContent` for any section text. Use `getPrompt('macro-filter')` etc. to load the (still-stub) prompts — Wave 4 will replace those stubs with real text.
+
+**Deviations from the Wave 3 prompt (with reasons)**
+
+1. **`narrative-spine.md` front-matter changed `responseFormat: text` → `json`.** The phase B.5 implementation Zod-parses the response, so JSON mode is correct; the stub had it wrong. The other three prompts kept their original front-matter (`role`, `temperature`).
+2. **Phase A's outline-aware path takes `outline: OutlineNode[]` via `PhaseAOptions` rather than reading it off `ParsedBook`.** The parsers don't expose pdfjs's `getOutline()` yet. Wave 4 (or a follow-up to Wave 2A) should plumb outline into `ParsedBook`; in the meantime, the orchestrator will call pdfjs directly and pass the parsed outline tree in. This keeps Phase A pure and testable without a real PDF in the fixtures.
+3. **EPUB spine detection uses `Block.spineItemId` on the parsed pages**, not `ParsedBook.spine` directly. This is because each `Page` is already 1:1 with a spine item in the EPUB parser; the page's first body block carries the `spineItemId`. If a future spine entry has zero text blocks, it is silently skipped — acceptable for v1.
+4. **Hybrid mode marks all sections as `source: 'outline'`** when outline+LLM are mixed (top-level `result.source = 'hybrid'`). Section-level provenance is coarse; we only distinguish at the boundary-set level. If Wave 4 wants per-section provenance for the run record, extend `SectionSource` later.
+5. **EPUB long-spine split is a single-shot LLM call**, not recursive. Each "page" in the EPUB parser is one spine item; if a spine item exceeds the token budget (default ~30k tokens estimated by char-count/4), Phase A asks the LLM for cut points and splits the block list. Deeper recursion can be added in Wave 4 if needed for novellas-as-single-XHTML EPUBs.
+6. **No `'no-chapter-book'` route switch yet** — Phase A returns a warning ("Structural confidence low; consider running no-chapter route") when avg confidence < 0.4. Wave 6 (routes) is responsible for actually switching routes on this signal.
+7. **Concurrency test uses a `ConcurrencyTrackingMock` subclass injected via a typed-private escape hatch** (`client as unknown as { adapter }`). The `LLMClient` only exposes `useMockProvider()` which returns a vanilla `MockProvider`; rather than expand the public API just for this test, the test reaches into the adapter slot. Wave 4 should consider exposing `setAdapter(adapter)` on `LLMClient` if it ends up wanting the same trick.
+
+**Notes for Wave 4**
+
+- C1/C1.5/C2 prompts are still stubs — replace them in Wave 4.
+- The role for each phase is locked by the prompt front-matter (`cheap` for A/A.5, `smart` for B/B.5, `reasoning` for C1/C1.5, `smart` for C2/bracket-writer). Don't override unless plumbing user settings.
+- `phaseBSummarize` returns sections in the **original input order** (it uses `mapWithLimit` which `Promise.all`s, preserving array order). Don't re-sort.
+- `phaseB5Spine` returns a `NarrativeSpine` whose `voiceAnchors` are guaranteed to be present (case-insensitive substring) in at least one section's `rawText`. Wave 4 can rely on this invariant.
+- `CanonicalPassage[]` returned by Phase A.5 only contains entries where `validated === true` by default. Pass `{ includeUnvalidated: true }` if Wave 4 wants the raw list for debugging.
+- The `Emit` callback fires `phase-start`, `phase-progress`, `phase-end`, and `phase-error` events. Use it to drive the section grid UI in Wave 6.
+- All phase functions are immutable: they return new `Section[]` (spreading the input) and never mutate.
+- All Zod parse failures degrade gracefully — phases return placeholder data and emit a `phase-error` event rather than throwing.
