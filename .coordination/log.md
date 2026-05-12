@@ -84,7 +84,7 @@ Single API key input field. Auto-detect:
 
 ### Wave 1 complete
 
-**Commit SHA**: filled in after push (see `git log`).
+**Commit SHA**: `db49f55` (scaffold commit). This log update lands in a follow-up commit on the same wave.
 
 **What's in the repo now**
 
