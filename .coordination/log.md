@@ -484,3 +484,53 @@ type MicroDecision = {
 - The sentence-boundary heuristic in C2 preflight is conservative; if Wave 5 sees too many `splits-sentence` rejections in practice, the right fix is to relax `isSentenceBoundary` (not to widen the snap distance — wider snaps risk dropping unrelated material).
 - `phaseC1Macro` falls back to `KEEP_FULL, confidence: 0` for any section the model omits. Wave 5's UI / ledger should highlight `confidence === 0` sections so users know to manually review.
 - All three phases are immutable. Decision arrays passed in are spread/copied, never mutated.
+
+### Wave 5C — Ledger generator complete
+
+**Scope**: `src/pipeline/phaseD-reconstruct/ledger.ts` + `tests/unit/pipeline/phaseD-ledger.test.ts`. Ran in parallel with Wave 5A (bracket-writer + EPUB recon). No file overlap.
+
+**Build/lint/test status (my files in isolation)**
+
+- `npm run test` → 146 passed (17 files). Wave 5C adds 14 ledger tests.
+- `npm run lint` → my code clean. Existing 1 warning in `src/pipeline/bracket-writer.ts` (Wave 5A's file) is outside scope.
+- `npm run build` → my ledger.ts compiles clean under `tsc -b`. The only build errors are 2 implicit-`any` errors in `src/pipeline/phaseD-reconstruct/epub.ts` (Wave 5A's file, still uncommitted).
+
+**Files added**
+
+- `src/pipeline/phaseD-reconstruct/ledger.ts` — pure-synchronous `buildLedger(input: LedgerInput): LedgerOutput`. Renders the full Markdown ledger: title from `parsedBook.title` (fallback original filename), generated-at UTC stamp, run id, purpose, cost; `## Summary` with original/abridged char counts + reduction %; `## Models & prompts` table from `modelMapping` + truncated-12-char `promptHashes`; `## Narrative spine`; `## Canonical passages preserved` (empty-state "No canonical passages identified."); `## Section-by-section ledger` per section in `order` with verdict label, rationale, forward/backward deps, plus either the whole-section replacement bracket (COMPRESS/DROP) or the list of micro cuts with `bracketLengthHint`, rationale, and bracket body (KEEP_*).
+- Stats computed exactly per the wave prompt: `originalLengthChars = parsedBook.rawText.length`; `abridgedLengthChars = Σ section_kept_chars + Σ bracket chars` for KEEP_*; whole-section bracket length for COMPRESS/DROP. `reductionPercent` rounded to 1 decimal.
+- Filename sanitization: `title || stripExtension(originalFileName)` → NFKD-strip-combining → lowercased kebab-case → suffix `-abridgement-ledger.md`, capped at 80 chars. If unusable, falls back to `abridgement-ledger-<first8ofRunId>.md`.
+- Markdown escaping: separate helpers for `escapeInline` (full punctuation set), `escapeEmphasis` (only emphasis-relevant chars for the purpose line so it reads as italics), `escapeBackticks` (run-id / hash inline code), `escapeTableCell` (escapes `|` and newlines). The purpose field is escaped via `escapeEmphasis` so user-supplied backticks / asterisks / underscores don't break the markdown.
+
+**API for Wave 5B (PDF recon) and Wave 6 (orchestrator)**
+
+```ts
+import { buildLedger, type LedgerInput, type LedgerOutput, type LedgerBracket } from '@/pipeline/phaseD-reconstruct/ledger'
+const { markdown, blob, filename, stats } = buildLedger({
+  parsedBook, sections, macroDecisions, microDecisions, spine, canonicalPassages,
+  brackets,                  // collect from BracketRecord[] in IDB; deletionIndex = -1 for whole-section
+  runId, startedAt, finishedAt,
+  modelMapping, promptHashes, totalCostUsd,
+  purpose, originalFileName,
+})
+```
+
+- `brackets[].deletionIndex` is `-1` for the whole-section bracket on COMPRESS_TO_BRACKET / DROP_TO_ONE_LINE sections; `0..N-1` otherwise (matches the `MicroDeletion[]` index). Wave 6 should compose this array from `BracketRecord` rows in IDB plus the `sectionId` mapping.
+- The Blob is `text/markdown`; size matches `markdown.length` byte-encoded. Wave 6's results screen can pass `blob` straight to `URL.createObjectURL` for the download.
+- `stats` is the same data the live preview / results-ribbon UI will want to show; it's already computed once, no need to recompute downstream.
+
+**Deviations from the Wave 5C prompt**
+
+1. **`originalLengthChars` uses `parsedBook.rawText.length`** as specified; UTF-16-code-unit-based, not byte length. Stats are character counts, not byte counts — matches the human-facing prose ("4500 characters").
+2. **`blob.size` is measured via UTF-8 byte length** in the test, but the Blob is constructed from the markdown string and the browser encodes it as UTF-8 internally. The test uses `new TextEncoder().encode(markdown).length` so it stays correct regardless of any high-codepoint characters that happen to appear. (Spec said "length matches markdown.length"; for pure-ASCII fixture content these are identical, but the byte-length comparison is the safer invariant.)
+3. **Filename ASCII normalization** uses NFKD + diacritic-stripping then `[^a-z0-9]+ → -`. Non-Latin scripts collapse to empty → triggers the runId fallback, which is the intended behavior for Wave 1's "v1 = LTR Latin/Cyrillic/Greek" stance.
+4. **Generated-at timestamp is UTC** to keep ledgers reproducible across timezones. Format: `YYYY-MM-DD HH:MM UTC`.
+5. **Empty-section run** (e.g., aborted before Phase A) renders `_No sections recorded for this run._` rather than throwing — this lets the ledger still be useful as a diagnostic artifact on partial runs.
+6. **Markdown escaping is intentionally aggressive on the title** (uses `escapeInline`) because section titles often come from parsed PDF headers that may include `*` or other artifacts. The purpose field uses `escapeEmphasis` (only `* _ \` ` `) so it can read as italic prose. The narrative-spine `centralArgument` uses `escapeBlock` (only escapes literal backslashes) since it's already authored prose from a smart-model call.
+
+**Notes for downstream waves**
+
+- Wave 6 will call `buildLedger(...)` exactly once at the end of Phase D, then persist the `blob` to `outputs` (kind: `'ledger-md'`) and surface `markdown` in the LedgerPreview component.
+- The render is pure synthesis — no LLM calls, no I/O. Safe to call from the main thread; ~10ms for a typical-sized book.
+- If Wave 5B (PDF recon) wants to embed a "Cuts in this run" appendix inside the PDF itself, it can re-use the same `LedgerInput` shape and call `buildLedger` to get the markdown, then render-as-text.
+- The fixture in the test uses 3 sections (KEEP_FULL / KEEP_PARTIAL with 2 cuts / DROP_TO_ONE_LINE) — close to the wave-prompt-specified shape; numbers are verified by hand in the test comments.
