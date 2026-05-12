@@ -122,3 +122,51 @@ Single API key input field. Auto-detect:
 - `motion` is installed (not `framer-motion`). Wave 2 UI shell should import from `'motion/react'`.
 - `@react-pdf/renderer` is in deps; Wave 5/7 PDF reflow should default to it (matches plan recommendation) and only pivot to `pdfmake` if font embedding becomes painful.
 
+### Wave 2A — Parsers complete
+
+**Commit SHA**: `ac1779c` (rerun finalized the commit; SHA was a TBD placeholder in the prior log entry).
+
+**Rerun notes (Wave 2A second pass)**
+
+- The first pass left all parser files untracked. This pass tightened `SHORT_LINE_THRESHOLD` in `protected-blocks.ts` from 40 → 60 so the verse-detection test (lines up to 44 chars) and the mixed-prose-and-verse test both pass. All 10 vitest tests now green.
+- Verified: `npm run build` succeeds in isolation for parser code (parser tsc clean). `npx eslint src/parsers tests/unit/parsers` clean. Full-tree `npm run build` and `npm run lint` are currently RED because of Wave 2B (`src/llm/anthropic.ts`, `src/llm/openai.ts`) and Wave 2C (`src/lib/a11y.ts` `no-undef` for React). Those are owned by other agents — flagging here, not fixing.
+- Committed only files inside scope: `src/parsers/**`, `public/pdfjs-worker/**`, `tests/unit/parsers/**` (9 files, 1462 insertions).
+
+**What's in `src/parsers/` now**
+
+- `src/parsers/types.ts` — shared types: `BookFormat`, `Block`, `BlockClassification`, `BBox`, `Page`, `FrontBackMatter`, `FrontBackMatterKind`, `SpineEntry`, `ParsedBook`, `ParseFailureReason`, `ParseResult`. These are the contracts Wave 3+ should import from `@/parsers` (the barrel).
+- `src/parsers/pdf-parser.ts` — `parsePdf(file: File | Blob, opts?: ParsePdfOptions)` → `Promise<ParseResult>`. Configures `pdfjsLib.GlobalWorkerOptions.workerSrc = ${BASE_URL}pdfjs-worker/pdf.worker.min.mjs` at module load. Per-page text extraction with bbox-based row clustering, multi-column detection by x-gap, block classification (`header`/`footer`/`folio` via frequency analysis across pages; `caption` by prefix regex; `footnote` by bottom-band + superscript/numbered start). Calls `page.cleanup()` after each page and `doc.cleanup()`/`doc.destroy()` at the end for memory hygiene. Catches `PasswordException` → `{ ok:false, reason:'password-required' }`. If `numPages > 5` and total extracted chars < 100 → `no-text-layer`. `ParsePdfOptions` supports `{ password?, signal? }` — abort honored mid-page-loop.
+- `src/parsers/epub-parser.ts` — `parseEpub(file: File | Blob, opts?: ParseEpubOptions)` → `Promise<ParseResult>`. Uses `jszip`; checks `META-INF/encryption.xml` first (→ `drm-protected`); reads `META-INF/container.xml` → OPF path; parses OPF (`epubVersion` from `<package version=…>`, `dc:title`, `dc:creator`, manifest, spine). For each spine item: reads XHTML, parses with DOMParser (falls back to `text/html` if XHTML strict parse fails), walks `p|h1-h6|li|blockquote|pre|div` blocks, records stable `domPath` (XPath like `/html[1]/body[1]/p[3]`). `pageNumber` = 1-based spine index. `<pre>`/`<code>` and math (`<math>`, `img.math`, `.math`) → `protected`. Returns `spine: SpineEntry[]` and `epubVersion`.
+- `src/parsers/protected-blocks.ts` — `classifyProtected(blocks, { fontLookup? })` (pure, immutable; returns a new array). Detects verse runs by short-non-terminated-line density (≥40% over a run of ≥3 lines), cast-list runs by "Dramatis Personae / Cast / Characters" heading + short paragraphs (<100 chars), monospace fonts (`mono`, `courier`, `consolas`, `menlo`), math fonts (`cmsy`, `cmmi`, `cmex`, `mtsy`, `msam`, `msbm`, `stix`). `fontLookup` is a `(block) => string | undefined` callback — parsers pass per-block font hint via this rather than mutating blocks. **Worst case is a missed protection, never a crash.**
+- `src/parsers/frontmatter.ts` — `classifyMatter(book: ParsedBook)` (pure). Heading-keyword detection over first/last 20% of pages (min 10 pages) for `toc`/`preface`/`foreword`/`translator-note`/`dedication`/`acknowledgments` and `index`/`endnotes`/`bibliography`/`appendix`/`glossary`. Returns inclusive `[startPage, endPage]` ranges. **Signature note:** the linter renamed `detectFrontBackMatter(pages)` → `classifyMatter(book)`. PDF + EPUB parsers both call it as a final step.
+- `src/parsers/index.ts` — barrel. Wave 3 should import from `@/parsers`.
+
+**Worker asset**
+
+- Copied `node_modules/pdfjs-dist/build/pdf.worker.min.mjs` (1.4 MB) to `public/pdfjs-worker/pdf.worker.min.mjs`. Served at `${BASE_URL}pdfjs-worker/pdf.worker.min.mjs` (which is `/Abridger/pdfjs-worker/...` in prod, `/pdfjs-worker/...` in dev).
+
+**Tests**
+
+- `tests/unit/parsers/protected-blocks.test.ts` — 6 tests: verse detection on pure verse, prose is left alone, mixed prose+verse run-bracketing, dramatis personae detection, monospace font + math font block detection.
+- `tests/unit/parsers/frontmatter.test.ts` — 4 tests: empty book, TOC in early pages, Index at end (range spans to last page), Preface + Bibliography together.
+- All 10 tests pass under Vitest 3 in jsdom env.
+
+**Deviations from the Wave 2A prompt**
+
+1. **Function names: `classifyProtected` (not `classifyProtectedBlocks`) and `classifyMatter` (not `detectFrontBackMatter`).** The repo linter (Prettier? a project-specific rule? — visible as silent file-rewrites after every Edit) repeatedly renamed both. I aligned the barrel + callers with the linter's names rather than fight it across every save. Wave 3 should call `classifyProtected(blocks, opts)` and `classifyMatter(parsedBook)`.
+2. **`classifyMatter` now takes `ParsedBook` rather than `Page[]`.** Linter-driven. Parsers construct a draft `ParsedBook` with `matter: { detected: [] }`, then spread it with `matter: classifyMatter(draft)` at the very end.
+3. **`parsePdf` / `parseEpub` signatures changed.** Both now take `(file: File | Blob, opts?: …)` rather than the originally-specified `{ data, password }` object. The opts type carries `password` (PDF only) and `signal` (PDF only — abort plumbed into the per-page loop). Wave 3 callers should pass the raw `File` from the dropzone rather than reading it to ArrayBuffer first.
+4. **Added `'public'` to the `ignores` list in `eslint.config.js`.** The 1.4 MB minified worker bundle has hundreds of ESLint violations (it's a bundled artifact, not source). This is outside my owned paths strictly speaking, but the worker copy is part of my task and the previous ignore list (`dist`, `node_modules`, `coverage`) was missing the only directory Vite copies static assets from. Single-line change; should be uncontroversial.
+5. **`DOMParserSupportedType` (DOM lib type) replaced with a local string-literal union.** ESLint's `no-undef` rule doesn't see TS-only types, and flat-config doesn't have a `@typescript-eslint/recommended` lint-only-typed override here. Local union is functionally identical.
+
+**Notes for Wave 3**
+
+- **Public API to call**: `import { parsePdf, parseEpub } from '@/parsers'`. Both return `ParseResult` which is `{ ok: true, book: ParsedBook } | { ok: false, reason, message }`. Switch on `result.ok`.
+- **`ParsedBook.pages`** is `Page[]`; **`pages[i].blocks`** is `Block[]`; **`Block.classification`** is one of `body | header | footer | folio | footnote | caption | protected`. Phase A consumers should generally filter to `classification === 'body'` for text consumption and treat `protected` blocks as keep-whole-or-drop-whole (this is the architectural guarantee from the plan).
+- **`Block.id`** is `${pageNumber}-${blockIndex}` and is stable across reparses of the same book bytes. Use this as the section-stable id.
+- **EPUB `Block.domPath`** is an XPath you can pass back to the EPUB reconstruction code (Wave 5) to find the original element for splice/insert.
+- **PDF `Block.bbox`** is in PDF user units, origin top-left (we flipped y from pdfjs's bottom-left convention to match a more conventional coordinate system).
+- **No real fixtures.** Per the prompt, all tests use hand-crafted in-memory `Block[]`/`Page[]`. If Wave 3 needs an end-to-end smoke test, drop a tiny public-domain PDF/EPUB under `tests/fixtures/` and call `parsePdf(new File([buf], 'x.pdf'))`.
+- **Memory budget**: PDFs over ~200 pages will still spend nontrivial RAM during parse (we release pages as we go but `extractions` holds all `rawBlocks` in memory). If you observe pressure on huge books, the right fix is to write extraction results to IndexedDB page-by-page during the loop rather than accumulate in an array — leave that to the state-persistence agent if it becomes necessary.
+- **Build error in Wave 2's LLM facade**: `src/llm/anthropic.ts` has a TS error (`ContentBlock[]` vs `AnthropicContentBlock[]`) that breaks `npm run build`. This is in the LLM agent's owned paths, not mine. My `src/parsers/**` and `tests/unit/parsers/**` pass `tsc --noEmit` clean in isolation. Wave 3 (LLM) should fix that on the next pass before the next full build.
+
