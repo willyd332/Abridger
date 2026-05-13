@@ -17,7 +17,7 @@ function markWelcomed(): void {
   try {
     window.localStorage.setItem(STORAGE_KEY, '1')
   } catch {
-    // localStorage may be unavailable (private mode, etc.) — silent
+    // localStorage may be unavailable (private mode, etc.); silent.
   }
 }
 
@@ -58,21 +58,21 @@ export function WelcomeOverlay() {
           >
             <h2 id="welcome-title" className="welcome-overlay__title">The Abridger</h2>
             <p className="welcome-overlay__body">
-              The Abridger turns long books into shorter ones, using your own
+              The Abridger turns long books into shorter ones using your own
               Anthropic or OpenAI API key. Upload a PDF or EPUB, tell it what
               you are trying to get out of the book, and it produces an
-              abridged version with editorial brackets standing in for what
-              was cut &mdash; the way some legal textbooks compress passages
-              they expect you to skim. The narrative voice, the famous
-              arguments, and the spine of the reasoning all stay. You can
-              still say you read it.
+              abridged version. Editorial brackets stand in for what was cut,
+              the way some legal textbooks compress passages they expect you
+              to skim. The narrative voice, the famous arguments, and the
+              spine of the reasoning all stay. You can still say you read
+              the book.
             </p>
             <p className="welcome-overlay__body">
               Nothing leaves your browser except the API calls to your chosen
               provider. The book itself, your key, and the finished
               abridgement all live locally. A three-hundred-page book
               typically takes a few minutes and costs roughly one to four
-              dollars depending on the models you pick.
+              dollars, depending on the models you pick.
             </p>
             <div className="welcome-overlay__actions">
               <button
