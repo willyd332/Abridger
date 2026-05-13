@@ -1334,16 +1334,7 @@
 }
 
 .pipeline-view__main {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(20rem, 1fr);
-  gap: 1.25rem;
-  align-items: start;
-}
-
-@media (max-width: 1100px) {
-  .pipeline-view__main {
-    grid-template-columns: 1fr;
-  }
+  display: block;
 }
 
 .pipeline-view__grid-wrap {
@@ -1408,20 +1399,9 @@
   margin: 0;
 }
 
-/* Section grid */
-
-.section-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-  gap: 0.85rem;
-}
-
-.section-grid--empty {
-  padding: 1.5rem;
-  text-align: center;
-  border: 1px dashed var(--shell-rule);
-  border-radius: var(--shell-radius-lg);
-}
+/* Section grid is defined as .section-grid--list above; the old card-grid
+   rule was removed because its display:grid overrode the list display:flex
+   and squeezed every row into a 3-column auto-fill cell. */
 
 .section-grid__empty-note {
   font-style: italic;
