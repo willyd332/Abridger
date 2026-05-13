@@ -1,4 +1,4 @@
-import { LLMClient, DEFAULT_MAPPING } from '@/llm/client'
+import { LLMClient, DEFAULT_MAPPING, type CallEvent } from '@/llm/client'
 import { listPrompts, getPrompt } from '@/llm/prompts/loader'
 import type { Provider } from '@/llm/types'
 
@@ -181,7 +181,59 @@ async function buildClient(input: StartRunInput): Promise<LLMClient> {
     provider: input.provider,
     apiKey: input.apiKey,
     ceilingUsd: input.costCeiling,
+    onCallEvent: makeActivityListener(),
   })
+}
+
+function makeActivityListener(): (event: CallEvent) => void {
+  return (event) => {
+    const store = getAppStore().getState()
+    if (event.kind === 'call-start') {
+      store.pushActivity({
+        id: event.requestId,
+        phase: event.phase,
+        sectionId: event.sectionId,
+        role: event.role,
+        model: event.model,
+        startedAt: event.startedAt,
+        status: 'in_flight',
+        attempt: 0,
+        estimateUsd: event.estimateUsd,
+      })
+      return
+    }
+    if (event.kind === 'call-retry') {
+      store.patchActivity(event.requestId, { status: 'retrying', attempt: event.attempt })
+      return
+    }
+    if (event.kind === 'call-end') {
+      store.patchActivity(event.requestId, {
+        status: 'done',
+        endedAt: event.endedAt,
+        promptTokens: event.promptTokens,
+        completionTokens: event.completionTokens,
+        costUsd: event.costUsd,
+      })
+      store.setTokens({
+        promptTokens: store.tokens.promptTokens + event.promptTokens,
+        completionTokens: store.tokens.completionTokens + event.completionTokens,
+        callsCompleted: store.tokens.callsCompleted + 1,
+        callsFailed: store.tokens.callsFailed,
+      })
+      return
+    }
+    if (event.kind === 'call-error') {
+      store.patchActivity(event.requestId, {
+        status: 'error',
+        endedAt: event.endedAt,
+        errorMessage: `${event.errorKind}: ${event.message}`,
+      })
+      store.setTokens({
+        ...store.tokens,
+        callsFailed: store.tokens.callsFailed + 1,
+      })
+    }
+  }
 }
 
 async function runWorkflow(args: {
@@ -381,6 +433,7 @@ export async function resumeRun(runId: string): Promise<StartRunResult> {
     provider: run.provider,
     apiKey: '',
     ceilingUsd: run.cost.ceilingUsd,
+    onCallEvent: makeActivityListener(),
   })
   const startedAt = Date.now()
   const route = run.route ?? 'normal-book'

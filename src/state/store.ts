@@ -24,10 +24,43 @@ export type JobView = {
   sections: SectionRecord[]
 }
 
+export type ActivityEntry = {
+  id: string                    // requestId from LLMClient
+  phase: string
+  sectionId?: string
+  role: 'cheap' | 'smart' | 'reasoning'
+  model: string
+  startedAt: number
+  endedAt?: number
+  status: 'in_flight' | 'done' | 'error' | 'retrying'
+  attempt: number
+  estimateUsd: number
+  promptTokens?: number
+  completionTokens?: number
+  costUsd?: number
+  errorMessage?: string
+}
+
+export type TokenTotals = {
+  promptTokens: number
+  completionTokens: number
+  callsCompleted: number
+  callsFailed: number
+}
+
+const DEFAULT_TOKEN_TOTALS: TokenTotals = {
+  promptTokens: 0,
+  completionTokens: 0,
+  callsCompleted: 0,
+  callsFailed: 0,
+}
+
 export type AppState = {
   currentRunId: string | null
   job: JobView | null
   cost: CostCeiling
+  tokens: TokenTotals
+  activityLog: ActivityEntry[]
   intake: IntakeState
   setIntake: (patch: Partial<IntakeState>) => void
   beginRun: (
@@ -42,6 +75,10 @@ export type AppState = {
   cancelRun: () => Promise<void>
   refreshFromDB: () => Promise<void>
   setCurrentRunId: (runId: string | null) => void
+  setTokens: (totals: TokenTotals) => void
+  pushActivity: (entry: ActivityEntry) => void
+  patchActivity: (id: string, patch: Partial<ActivityEntry>) => void
+  clearActivity: () => void
 }
 
 const DEFAULT_INTAKE: IntakeState = {
@@ -57,11 +94,15 @@ const DEFAULT_COST: CostCeiling = {
   billedUsd: 0,
 }
 
+const MAX_ACTIVITY_ENTRIES = 200
+
 export function createAppStore(): StoreApi<AppState> {
   return createStore<AppState>()((set, get) => ({
     currentRunId: null,
     job: null,
     cost: DEFAULT_COST,
+    tokens: DEFAULT_TOKEN_TOTALS,
+    activityLog: [],
     intake: DEFAULT_INTAKE,
 
     setIntake(patch) {
@@ -70,6 +111,32 @@ export function createAppStore(): StoreApi<AppState> {
 
     setCurrentRunId(runId) {
       set({ currentRunId: runId })
+    },
+
+    setTokens(totals) {
+      set({ tokens: totals })
+    },
+
+    pushActivity(entry) {
+      set((state) => {
+        const next = [entry, ...state.activityLog]
+        if (next.length > MAX_ACTIVITY_ENTRIES) next.length = MAX_ACTIVITY_ENTRIES
+        return { activityLog: next }
+      })
+    },
+
+    patchActivity(id, patch) {
+      set((state) => {
+        const idx = state.activityLog.findIndex((e) => e.id === id)
+        if (idx === -1) return {}
+        const next = [...state.activityLog]
+        next[idx] = { ...next[idx], ...patch }
+        return { activityLog: next }
+      })
+    },
+
+    clearActivity() {
+      set({ activityLog: [], tokens: DEFAULT_TOKEN_TOTALS })
     },
 
     async beginRun({ run, book, sections: sectionRecords }) {

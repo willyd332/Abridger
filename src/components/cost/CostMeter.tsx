@@ -40,6 +40,7 @@ function formatUsd(n: number): string {
 export function CostMeter({ onPause, onResume, onCancel, runStatus }: CostMeterProps) {
   const reduced = useReducedMotion()
   const cost = useAppStore(useShallow((state) => state.cost))
+  const tokens = useAppStore(useShallow((state) => state.tokens))
   const remaining = useAppStore(selectCostRemaining)
   const currentPhase = useAppStore(selectCurrentPhase)
   const progress = useAppStore(useShallow(selectProgress))
@@ -99,8 +100,23 @@ export function CostMeter({ onPause, onResume, onCancel, runStatus }: CostMeterP
         </div>
         <div className="cost-meter__cost-remaining" aria-live="polite">
           {hardStop
-            ? 'Cost ceiling reached — run paused.'
+            ? 'Cost ceiling reached. Run paused.'
             : `Remaining: ${formatUsd(remaining)}`}
+        </div>
+        <div className="cost-meter__tokens" aria-live="polite">
+          <span className="cost-meter__tokens-label">tokens</span>
+          <span className="cost-meter__tokens-in">
+            in {tokens.promptTokens.toLocaleString()}
+          </span>
+          <span className="cost-meter__tokens-sep">·</span>
+          <span className="cost-meter__tokens-out">
+            out {tokens.completionTokens.toLocaleString()}
+          </span>
+          <span className="cost-meter__tokens-sep">·</span>
+          <span className="cost-meter__tokens-calls">
+            {tokens.callsCompleted} {tokens.callsCompleted === 1 ? 'call' : 'calls'}
+            {tokens.callsFailed > 0 ? ` (${tokens.callsFailed} failed)` : ''}
+          </span>
         </div>
       </div>
 

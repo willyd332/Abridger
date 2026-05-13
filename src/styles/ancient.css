@@ -574,6 +574,196 @@
   line-height: 1.55;
 }
 
+.cost-meter__tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+  color: var(--shell-ink-faint, #7a6a4f);
+  letter-spacing: 0.02em;
+}
+
+.cost-meter__tokens-label {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  opacity: 0.75;
+}
+
+.cost-meter__tokens-sep {
+  opacity: 0.45;
+}
+
+.activity-log {
+  margin-top: 1.25rem;
+  background-color: rgba(255, 250, 235, 0.55);
+  border: 1px solid rgba(184, 134, 11, 0.35);
+  border-radius: 4px;
+  padding: 0.9rem 1rem;
+  max-height: 22rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-log__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.55rem;
+  gap: 1rem;
+}
+
+.activity-log__title {
+  font-family:
+    'EB Garamond', Garamond, Georgia, serif;
+  font-size: 1.05rem;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.activity-log__count {
+  font-size: 0.78rem;
+  color: var(--shell-ink-soft);
+  font-style: italic;
+}
+
+.activity-log__body {
+  overflow-y: auto;
+  flex: 1;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--shell-ink);
+}
+
+.activity-log__empty {
+  margin: 0.5rem 0;
+  color: var(--shell-ink-faint, #7a6a4f);
+  font-style: italic;
+  font-family:
+    'EB Garamond', Garamond, Georgia, serif;
+  font-size: 0.95rem;
+}
+
+.activity-log__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.activity-log__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  padding: 0.32rem 0.4rem;
+  border-bottom: 1px dotted rgba(42, 24, 16, 0.12);
+}
+
+.activity-log__row:last-child {
+  border-bottom: none;
+}
+
+.activity-log__row--in_flight {
+  background-color: rgba(184, 134, 11, 0.08);
+}
+
+.activity-log__row--retrying {
+  background-color: rgba(218, 165, 32, 0.15);
+}
+
+.activity-log__row--error {
+  background-color: rgba(160, 30, 30, 0.08);
+}
+
+.activity-log__time {
+  color: var(--shell-ink-faint, #7a6a4f);
+  min-width: 5.5rem;
+}
+
+.activity-log__phase {
+  min-width: 4.5rem;
+  color: var(--shell-ink);
+}
+
+.activity-log__role {
+  color: var(--shell-ink-soft);
+  font-style: italic;
+  min-width: 4.5rem;
+}
+
+.activity-log__model {
+  color: var(--shell-ink-soft);
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-log__section {
+  color: var(--shell-ink-faint, #7a6a4f);
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-log__duration {
+  color: var(--shell-ink-soft);
+  min-width: 3.5rem;
+}
+
+.activity-log__status {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  min-width: 4rem;
+  text-align: center;
+}
+
+.activity-log__status--in_flight {
+  color: #b8860b;
+}
+
+.activity-log__status--retrying {
+  color: #c87a00;
+}
+
+.activity-log__status--done {
+  color: #2a6b2a;
+}
+
+.activity-log__status--error {
+  color: #a01e1e;
+}
+
+.activity-log__tokens {
+  color: var(--shell-ink-soft);
+  min-width: 14rem;
+}
+
+.activity-log__cost {
+  color: var(--shell-ink);
+  min-width: 4rem;
+}
+
+.activity-log__error {
+  color: #a01e1e;
+  font-style: italic;
+  flex-basis: 100%;
+  margin-top: 0.15rem;
+}
+
 .welcome-overlay {
   position: fixed;
   inset: 0;

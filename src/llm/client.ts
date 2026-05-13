@@ -54,7 +54,55 @@ export type ClientConfig = {
   estimateUsd?: (provider: Provider, model: string, opts: CallOptions) => number
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
   rng?: () => number
+  onCallEvent?: (event: CallEvent) => void
 }
+
+export type CallEvent =
+  | {
+      kind: 'call-start'
+      requestId: string
+      phase: string
+      sectionId?: string
+      role: Role
+      model: string
+      estimateUsd: number
+      startedAt: number
+    }
+  | {
+      kind: 'call-end'
+      requestId: string
+      phase: string
+      sectionId?: string
+      role: Role
+      model: string
+      promptTokens: number
+      completionTokens: number
+      costUsd: number
+      durationMs: number
+      endedAt: number
+    }
+  | {
+      kind: 'call-error'
+      requestId: string
+      phase: string
+      sectionId?: string
+      role: Role
+      model: string
+      errorKind: string
+      message: string
+      retried: number
+      durationMs: number
+      endedAt: number
+    }
+  | {
+      kind: 'call-retry'
+      requestId: string
+      phase: string
+      sectionId?: string
+      role: Role
+      model: string
+      attempt: number
+    }
 
 const DEFAULT_ESTIMATE_USD = (provider: Provider, model: string, opts: CallOptions): number => {
   const promptTokens =
@@ -79,6 +127,7 @@ export class LLMClient {
   private rng: () => number
   private rateLimits = createRateLimitRegistry()
   private mock: MockProvider | null = null
+  private onCallEvent: ((event: CallEvent) => void) | undefined
 
   constructor(config: ClientConfig) {
     this.provider = config.provider
@@ -90,6 +139,20 @@ export class LLMClient {
     this.estimateUsd = config.estimateUsd ?? DEFAULT_ESTIMATE_USD
     this.sleep = config.sleep ?? defaultSleep
     this.rng = config.rng ?? Math.random
+    this.onCallEvent = config.onCallEvent
+  }
+
+  setOnCallEvent(listener: ((event: CallEvent) => void) | undefined): void {
+    this.onCallEvent = listener
+  }
+
+  private emit(event: CallEvent): void {
+    if (!this.onCallEvent) return
+    try {
+      this.onCallEvent(event)
+    } catch {
+      // listener errors must never break the pipeline
+    }
   }
 
   static fromApiKey(apiKey: string, ceilingUsd: number): LLMClient {
@@ -160,6 +223,10 @@ export class LLMClient {
   private async dispatch(opts: CallOptions): Promise<CallResult> {
     const model = this.modelFor(opts.role)
     const estimate = this.estimateUsd(this.provider, model, opts)
+    const requestId = opts.metadata?.requestId ?? generateRequestId()
+    const phase = opts.metadata?.phase ?? 'unknown'
+    const sectionId = opts.metadata?.sectionId
+    const startedAt = Date.now()
 
     try {
       this.costMeter.reserve(estimate)
@@ -174,6 +241,17 @@ export class LLMClient {
       }
     }
 
+    this.emit({
+      kind: 'call-start',
+      requestId,
+      phase,
+      sectionId,
+      role: opts.role,
+      model,
+      estimateUsd: estimate,
+      startedAt,
+    })
+
     let totalRetried = 0
     try {
       const bucket = this.rateLimits.get(this.provider)
@@ -183,6 +261,17 @@ export class LLMClient {
         raw: unknown
       }>(
         async (attempt) => {
+          if (attempt > 0) {
+            this.emit({
+              kind: 'call-retry',
+              requestId,
+              phase,
+              sectionId,
+              role: opts.role,
+              model,
+              attempt,
+            })
+          }
           totalRetried = attempt
           const wait = bucket.waitMs()
           if (wait > 0) await this.sleep(wait, opts.signal)
@@ -219,10 +308,43 @@ export class LLMClient {
 
       if (!result.ok) {
         this.costMeter.cancel(estimate)
+        this.costMeter.recordCallFailed()
+        const endedAt = Date.now()
+        this.emit({
+          kind: 'call-error',
+          requestId,
+          phase,
+          sectionId,
+          role: opts.role,
+          model,
+          errorKind: result.error.kind,
+          message: 'message' in result.error ? result.error.message : result.error.kind,
+          retried: result.attempts,
+          durationMs: endedAt - startedAt,
+          endedAt,
+        })
         return { ok: false, error: result.error, retried: result.attempts }
       }
 
       this.costMeter.commit(estimate, result.value.usage.costUsd)
+      this.costMeter.recordCallCompleted(
+        result.value.usage.promptTokens,
+        result.value.usage.completionTokens,
+      )
+      const endedAt = Date.now()
+      this.emit({
+        kind: 'call-end',
+        requestId,
+        phase,
+        sectionId,
+        role: opts.role,
+        model,
+        promptTokens: result.value.usage.promptTokens,
+        completionTokens: result.value.usage.completionTokens,
+        costUsd: result.value.usage.costUsd,
+        durationMs: endedAt - startedAt,
+        endedAt,
+      })
       return {
         ok: true,
         data: result.value.text,
@@ -231,6 +353,21 @@ export class LLMClient {
       }
     } catch (err) {
       this.costMeter.cancel(estimate)
+      this.costMeter.recordCallFailed()
+      const endedAt = Date.now()
+      this.emit({
+        kind: 'call-error',
+        requestId,
+        phase,
+        sectionId,
+        role: opts.role,
+        model,
+        errorKind: 'unknown',
+        message: errorMessage(err),
+        retried: totalRetried,
+        durationMs: endedAt - startedAt,
+        endedAt,
+      })
       return {
         ok: false,
         error: { kind: 'unknown', message: errorMessage(err) },
@@ -238,6 +375,13 @@ export class LLMClient {
       }
     }
   }
+}
+
+function generateRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `req-${crypto.randomUUID()}`
+  }
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 function cloneMapping(mapping: RoleMapping): RoleMapping {

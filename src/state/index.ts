@@ -52,7 +52,14 @@ export {
   useAppStore,
   inspectMemoryPressure,
 } from './store'
-export type { AppState, IntakeState, JobView, MemoryPressureSnapshot } from './store'
+export type {
+  AppState,
+  IntakeState,
+  JobView,
+  MemoryPressureSnapshot,
+  ActivityEntry,
+  TokenTotals,
+} from './store'
 
 export {
   selectCurrentRun,

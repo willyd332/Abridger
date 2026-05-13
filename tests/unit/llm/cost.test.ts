@@ -8,6 +8,10 @@ describe('CostMeter', () => {
       ceilingUsd: 5,
       reservedUsd: 0,
       billedUsd: 0,
+      promptTokensTotal: 0,
+      completionTokensTotal: 0,
+      callsCompleted: 0,
+      callsFailed: 0,
     })
   })
 
@@ -26,6 +30,10 @@ describe('CostMeter', () => {
       ceilingUsd: 10,
       reservedUsd: 0,
       billedUsd: 1.5,
+      promptTokensTotal: 0,
+      completionTokensTotal: 0,
+      callsCompleted: 0,
+      callsFailed: 0,
     })
   })
 
@@ -37,7 +45,31 @@ describe('CostMeter', () => {
       ceilingUsd: 10,
       reservedUsd: 0,
       billedUsd: 0,
+      promptTokensTotal: 0,
+      completionTokensTotal: 0,
+      callsCompleted: 0,
+      callsFailed: 0,
     })
+  })
+
+  it('recordCallCompleted accumulates token totals', () => {
+    const meter = new CostMeter(10)
+    meter.recordCallCompleted(120, 80)
+    meter.recordCallCompleted(50, 30)
+    const snap = meter.snapshot()
+    expect(snap.promptTokensTotal).toBe(170)
+    expect(snap.completionTokensTotal).toBe(110)
+    expect(snap.callsCompleted).toBe(2)
+    expect(snap.callsFailed).toBe(0)
+  })
+
+  it('recordCallFailed increments failure counter only', () => {
+    const meter = new CostMeter(10)
+    meter.recordCallFailed()
+    const snap = meter.snapshot()
+    expect(snap.callsFailed).toBe(1)
+    expect(snap.callsCompleted).toBe(0)
+    expect(snap.promptTokensTotal).toBe(0)
   })
 
   it('throws BudgetExceededError when reserve would breach ceiling', () => {

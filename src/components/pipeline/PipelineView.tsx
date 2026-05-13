@@ -12,6 +12,7 @@ import { CostMeter } from '@/components/cost/CostMeter'
 import { BookSpine } from './BookSpine'
 import { SectionGrid } from './SectionGrid'
 import { LivePreviewPane } from './LivePreviewPane'
+import { ActivityLog } from './ActivityLog'
 
 interface PipelineViewProps {
   modelMapping?: ModelMapping
@@ -103,6 +104,8 @@ export function PipelineView({
 
         <LivePreviewPane onCancel={onCancel} />
       </div>
+
+      <ActivityLog />
     </div>
   )
 }

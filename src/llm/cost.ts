@@ -1,6 +1,13 @@
 import type { CostCeiling, LLMError } from './types'
 
-type Snapshot = Readonly<CostCeiling>
+export type CostMeterSnapshot = CostCeiling & {
+  promptTokensTotal: number
+  completionTokensTotal: number
+  callsCompleted: number
+  callsFailed: number
+}
+
+type Snapshot = Readonly<CostMeterSnapshot>
 
 const EPSILON = 1e-9
 
@@ -28,6 +35,10 @@ export class CostMeter {
   private ceilingUsd: number
   private reservedUsd: number
   private billedUsd: number
+  private promptTokensTotal = 0
+  private completionTokensTotal = 0
+  private callsCompleted = 0
+  private callsFailed = 0
 
   constructor(ceilingUsd: number) {
     if (!Number.isFinite(ceilingUsd) || ceilingUsd < 0) {
@@ -43,7 +54,21 @@ export class CostMeter {
       ceilingUsd: this.ceilingUsd,
       reservedUsd: this.reservedUsd,
       billedUsd: this.billedUsd,
+      promptTokensTotal: this.promptTokensTotal,
+      completionTokensTotal: this.completionTokensTotal,
+      callsCompleted: this.callsCompleted,
+      callsFailed: this.callsFailed,
     }
+  }
+
+  recordCallCompleted(promptTokens: number, completionTokens: number): void {
+    this.promptTokensTotal += promptTokens
+    this.completionTokensTotal += completionTokens
+    this.callsCompleted += 1
+  }
+
+  recordCallFailed(): void {
+    this.callsFailed += 1
   }
 
   setCeiling(ceilingUsd: number): void {
