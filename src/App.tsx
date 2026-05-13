@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { AncientLibraryShell } from '@/components/layout/AncientLibraryShell'
 import { MobileBlock } from '@/components/layout/MobileBlock'
 import { WelcomeOverlay } from '@/components/layout/WelcomeOverlay'
+import { PastRunsOverlay } from '@/components/layout/PastRunsOverlay'
 import { IntakeScreen, type IntakeParams } from '@/components/upload/IntakeScreen'
 import { PipelineView } from '@/components/pipeline/PipelineView'
 import { ResumePrompt } from '@/components/pipeline/ResumePrompt'
@@ -262,8 +263,9 @@ function App() {
   return (
     <>
       <MobileBlock />
-      <AncientLibraryShell statusMessage={statusMessage}>
+      <AncientLibraryShell statusMessage={statusMessage} onHome={handleStartOver}>
         <WelcomeOverlay />
+        <PastRunsOverlay />
         {showResume && resumable ? (
           <ResumePrompt
             summary={resumable}
