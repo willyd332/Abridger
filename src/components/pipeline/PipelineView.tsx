@@ -11,7 +11,6 @@ import {
 import { CostMeter } from '@/components/cost/CostMeter'
 import { BookSpine } from './BookSpine'
 import { SectionGrid } from './SectionGrid'
-import { LivePreviewPane } from './LivePreviewPane'
 import { ActivityLog } from './ActivityLog'
 
 interface PipelineViewProps {
@@ -101,8 +100,6 @@ export function PipelineView({
           />
           {phaseIsD ? <BinderyOverlay /> : null}
         </motion.section>
-
-        <LivePreviewPane onCancel={onCancel} />
       </div>
 
       <ActivityLog />

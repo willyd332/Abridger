@@ -68,14 +68,15 @@ function registerFonts(): string {
   }
 }
 
-// Skip running Font.register inside jsdom — fetch of /Abridger/fonts/* will fail
-// at render time and throw with no useful info. Detect by checking whether
-// fetch can reach the asset URL; simpler: check for jsdom user-agent.
+// Font registration is disabled. fontkit's woff2 parser inside @react-pdf/
+// renderer throws "Offset is outside the bounds of the DataView" in
+// production browsers on the EB Garamond woff2 files we ship — likely a
+// fontkit/woff2 quirk we can't fix from outside. Falling back to the PDF
+// standard 14 fonts which ship inside fontkit and always render. Output
+// loses the EB Garamond aesthetic for now; we can revisit by either
+// inlining font bytes as base64 at build time or shipping a TTF variant.
 function shouldRegisterFonts(): boolean {
-  if (typeof navigator === 'undefined') return true
-  const ua = navigator.userAgent ?? ''
-  if (ua.toLowerCase().includes('jsdom')) return false
-  return true
+  return false
 }
 
 // ----- Styling ----------------------------------------------------------------

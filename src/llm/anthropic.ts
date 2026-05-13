@@ -21,17 +21,30 @@ export function createAnthropicAdapter(config: AnthropicAdapterConfig): Provider
   })
 
   const call = async (model: string, opts: CallOptions): Promise<RawProviderResponse> => {
+    // Anthropic's reasoning models (Opus 4.x and newer) no longer accept the
+    // `temperature` parameter; passing it returns 400 invalid_request_error
+    // with "`temperature` is deprecated for this model." We detect those
+    // models by name and skip the param. Safer than maintaining a model
+    // allowlist: when in doubt, omit.
+    const isReasoningModel = /opus|o1|o3/i.test(model)
+    type CreateBody = {
+      model: string
+      system?: string
+      max_tokens: number
+      temperature?: number
+      messages: Array<{ role: 'user'; content: string }>
+    }
+    const body: CreateBody = {
+      model,
+      system: opts.system,
+      max_tokens: opts.maxTokens ?? config.defaultMaxTokens ?? DEFAULT_MAX_TOKENS,
+      messages: [{ role: 'user', content: opts.user }],
+    }
+    if (!isReasoningModel && typeof opts.temperature === 'number') {
+      body.temperature = opts.temperature
+    }
     const result = await client.messages
-      .create(
-        {
-          model,
-          system: opts.system,
-          max_tokens: opts.maxTokens ?? config.defaultMaxTokens ?? DEFAULT_MAX_TOKENS,
-          temperature: opts.temperature,
-          messages: [{ role: 'user', content: opts.user }],
-        },
-        { signal: opts.signal },
-      )
+      .create(body, { signal: opts.signal })
       .withResponse()
 
     const message = result.data
