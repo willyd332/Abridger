@@ -803,7 +803,19 @@
   color: #a01e1e;
   font-style: italic;
   flex-basis: 100%;
-  margin-top: 0.15rem;
+  margin: 0.15rem 0 0 0;
+  padding: 0.4rem 0.55rem;
+  background-color: rgba(160, 30, 30, 0.06);
+  border-left: 2px solid rgba(160, 30, 30, 0.45);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .welcome-overlay {

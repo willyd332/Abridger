@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { DEFAULT_LLM_CONCURRENCY, mapWithLimit } from '@/lib/concurrency'
 import { LLMClient } from '@/llm/client'
 import { getPrompt } from '@/llm/prompts/loader'
 
@@ -366,9 +367,9 @@ export async function phaseC1Macro(
   }
 
   const windows = buildWindows(sections, chunkSize, chunkOverlap)
-  const drafts: Array<{ windowIndex: number; decisions: MacroDecision[] }> = []
-  for (const w of windows) {
-    if (opts.signal?.aborted) break
+  let completed = 0
+  const windowDrafts = await mapWithLimit(windows, DEFAULT_LLM_CONCURRENCY, async (w) => {
+    if (opts.signal?.aborted) return null
     const decisions = await callMacroWithRetry(
       client,
       ctx,
@@ -378,14 +379,18 @@ export async function phaseC1Macro(
       `phaseC1-window-${w.windowIndex}`,
       { emit, signal: opts.signal },
     )
-    drafts.push({ windowIndex: w.windowIndex, decisions })
+    completed += 1
     emit?.({
       kind: 'phase-progress',
       phase: PHASE_NAME,
-      completed: drafts.length,
+      completed,
       total: windows.length + 1,
     })
-  }
+    return { windowIndex: w.windowIndex, decisions }
+  })
+  const drafts = windowDrafts.filter(
+    (d): d is { windowIndex: number; decisions: MacroDecision[] } => d !== null,
+  )
 
   const reconciled = await reconcile(client, ctx, sections, drafts, { emit, signal: opts.signal })
   emit?.({

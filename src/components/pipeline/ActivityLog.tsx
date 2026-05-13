@@ -104,9 +104,9 @@ export function ActivityLog() {
                   <span className="activity-log__cost">${entry.costUsd.toFixed(4)}</span>
                 ) : null}
                 {entry.status === 'error' && entry.errorMessage ? (
-                  <span className="activity-log__error" title={entry.errorMessage}>
-                    {entry.errorMessage.slice(0, 80)}
-                  </span>
+                  <pre className="activity-log__error" title={entry.errorMessage}>
+                    {entry.errorMessage}
+                  </pre>
                 ) : null}
               </li>
             ))}
