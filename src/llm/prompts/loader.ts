@@ -1,9 +1,9 @@
 import matter from 'gray-matter'
 import type { Role } from '../types'
 
-// Defensive shim: gray-matter assigns Buffer.from(content) to file.orig.
-// In the browser there is no Node Buffer; we provide a no-op stand-in so
-// the assignment doesn't blow up. We never read .orig.
+// The Buffer polyfill is installed globally in src/main.tsx. We leave a
+// defensive fallback here for test environments (vitest under jsdom) that
+// import this module directly without the main entry running first.
 function ensureBufferShim(): void {
   const g = globalThis as unknown as { Buffer?: { from: (input: unknown) => unknown } }
   if (typeof g.Buffer === 'undefined') {
