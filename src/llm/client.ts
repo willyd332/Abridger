@@ -252,6 +252,8 @@ export class LLMClient {
       startedAt,
     })
 
+    logCallStart(requestId, phase, sectionId, opts.role, model, opts)
+
     let totalRetried = 0
     try {
       const bucket = this.rateLimits.get(this.provider)
@@ -310,6 +312,8 @@ export class LLMClient {
         this.costMeter.cancel(estimate)
         this.costMeter.recordCallFailed()
         const endedAt = Date.now()
+        const errMsg = 'message' in result.error ? result.error.message : result.error.kind
+        logCallError(requestId, phase, opts.role, model, endedAt - startedAt, result.error.kind, errMsg)
         this.emit({
           kind: 'call-error',
           requestId,
@@ -318,7 +322,7 @@ export class LLMClient {
           role: opts.role,
           model,
           errorKind: result.error.kind,
-          message: 'message' in result.error ? result.error.message : result.error.kind,
+          message: errMsg,
           retried: result.attempts,
           durationMs: endedAt - startedAt,
           endedAt,
@@ -332,6 +336,7 @@ export class LLMClient {
         result.value.usage.completionTokens,
       )
       const endedAt = Date.now()
+      logCallEnd(requestId, phase, opts.role, model, endedAt - startedAt, result.value.usage, result.value.text)
       this.emit({
         kind: 'call-end',
         requestId,
@@ -375,6 +380,76 @@ export class LLMClient {
       }
     }
   }
+}
+
+function previewText(s: string | undefined, max = 600): string {
+  if (!s) return ''
+  return s.length <= max ? s : `${s.slice(0, max)}…[${s.length - max} more chars]`
+}
+
+function logCallStart(
+  requestId: string,
+  phase: string,
+  sectionId: string | undefined,
+  role: Role,
+  model: string,
+  opts: CallOptions,
+): void {
+  console.log(
+    `[abridger ▶] ${phase}${sectionId ? `:${sectionId}` : ''} ${role}/${model} ${requestId}`,
+    {
+      requestId,
+      phase,
+      sectionId,
+      role,
+      model,
+      systemPreview: previewText(opts.system, 400),
+      userPreview: previewText(opts.user, 800),
+      userLength: opts.user?.length ?? 0,
+      systemLength: opts.system?.length ?? 0,
+      temperature: opts.temperature,
+      maxTokens: opts.maxTokens,
+    },
+  )
+}
+
+function logCallEnd(
+  requestId: string,
+  phase: string,
+  role: Role,
+  model: string,
+  durationMs: number,
+  usage: Usage,
+  text: string,
+): void {
+  console.log(
+    `[abridger ◀] ${phase} ${role}/${model} ${requestId} ${durationMs}ms in:${usage.promptTokens} out:${usage.completionTokens} $${usage.costUsd.toFixed(4)}`,
+    {
+      requestId,
+      durationMs,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      costUsd: usage.costUsd,
+      responsePreview: previewText(text, 1200),
+      responseLength: text.length,
+      responseFull: text,
+    },
+  )
+}
+
+function logCallError(
+  requestId: string,
+  phase: string,
+  role: Role,
+  model: string,
+  durationMs: number,
+  errorKind: string,
+  message: string,
+): void {
+  console.warn(
+    `[abridger ✗] ${phase} ${role}/${model} ${requestId} ${durationMs}ms ${errorKind}`,
+    { requestId, errorKind, message },
+  )
 }
 
 function generateRequestId(): string {

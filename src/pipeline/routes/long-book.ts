@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { parseLlmJsonOrThrow } from '@/llm/parse-json'
 import { getPrompt } from '@/llm/prompts/loader'
 
 import {
@@ -148,7 +149,7 @@ async function runPartLevelMacro(
   if (!result.ok) return out
 
   try {
-    const parsed = partResponseSchema.parse(JSON.parse(result.data))
+    const parsed = partResponseSchema.parse(parseLlmJsonOrThrow(result.data))
     for (const p of parsed.parts) {
       out.set(p.partIndex, p)
     }

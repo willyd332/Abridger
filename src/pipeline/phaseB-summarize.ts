@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { DEFAULT_LLM_CONCURRENCY, mapWithLimit } from '@/lib/concurrency'
 import { LLMClient } from '@/llm/client'
+import { parseLlmJsonOrThrow } from '@/llm/parse-json'
 import { getPrompt } from '@/llm/prompts/loader'
 
 import type { Emit, Section } from './types'
@@ -95,7 +96,7 @@ async function summarizeOne(
   }
 
   try {
-    const parsed = summarizeResponseSchema.parse(JSON.parse(result.data))
+    const parsed = summarizeResponseSchema.parse(parseLlmJsonOrThrow(result.data))
     return {
       ...section,
       summary: parsed.summary,

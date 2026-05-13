@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { LLMClient } from '@/llm/client'
+import { parseLlmJsonOrThrow } from '@/llm/parse-json'
 import { getPrompt } from '@/llm/prompts/loader'
 
 import type {
@@ -218,7 +219,7 @@ async function attemptCall(
   }
   let parsed: z.infer<typeof responseSchema>
   try {
-    parsed = responseSchema.parse(JSON.parse(result.data))
+    parsed = responseSchema.parse(parseLlmJsonOrThrow(result.data))
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return { ok: false, usage, reason: `Invalid JSON: ${message}` }

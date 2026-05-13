@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { DEFAULT_LLM_CONCURRENCY, mapWithLimit } from '@/lib/concurrency'
 import { LLMClient } from '@/llm/client'
+import { parseLlmJsonOrThrow } from '@/llm/parse-json'
 import { getPrompt } from '@/llm/prompts/loader'
 
 import type {
@@ -183,7 +184,7 @@ async function callMacro(
   })
   if (!result.ok) return null
   try {
-    const parsed = responseSchema.parse(JSON.parse(result.data))
+    const parsed = responseSchema.parse(parseLlmJsonOrThrow(result.data))
     return parsed.decisions
   } catch {
     return null
@@ -307,7 +308,7 @@ async function reconcile(
 
   if (result.ok) {
     try {
-      const parsed = responseSchema.parse(JSON.parse(result.data))
+      const parsed = responseSchema.parse(parseLlmJsonOrThrow(result.data))
       for (const d of parsed.decisions) {
         merged.set(d.sectionId, d)
       }

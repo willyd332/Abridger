@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { DEFAULT_LLM_CONCURRENCY, mapWithLimit } from '@/lib/concurrency'
 import { LLMClient } from '@/llm/client'
+import { parseLlmJson, parseLlmJsonOrThrow } from '@/llm/parse-json'
 import { getPrompt } from '@/llm/prompts/loader'
 import type { Block, Page, ParsedBook } from '@/parsers/types'
 
@@ -166,26 +167,54 @@ async function runStructureWindow(
   })
   if (!result.ok) return { boundaries: [], ok: false }
 
-  try {
-    const parsed = structureResponseSchema.parse(JSON.parse(result.data))
-    const filtered = parsed.boundaries.filter(
-      (b) => b.boundaryPageNumber >= windowStartPage && b.boundaryPageNumber <= windowEndPage,
+  const jsonResult = parseLlmJson<unknown>(result.data)
+  if (!jsonResult.ok) {
+    console.warn(
+      `[abridger A] window ${windowStartPage}-${windowEndPage}: could not extract JSON from response`,
+      { requestId, reason: jsonResult.reason, raw: result.data.slice(0, 1200) },
     )
-    return { boundaries: filtered, ok: true }
-  } catch {
     return { boundaries: [], ok: true }
   }
+  const parseResult = structureResponseSchema.safeParse(jsonResult.value)
+  if (!parseResult.success) {
+    console.warn(
+      `[abridger A] window ${windowStartPage}-${windowEndPage}: JSON did not match schema`,
+      { requestId, zodIssues: parseResult.error.issues, raw: jsonResult.value },
+    )
+    return { boundaries: [], ok: true }
+  }
+  const filtered = parseResult.data.boundaries.filter(
+    (b) => b.boundaryPageNumber >= windowStartPage && b.boundaryPageNumber <= windowEndPage,
+  )
+  console.log(
+    `[abridger A] window ${windowStartPage}-${windowEndPage}: ${filtered.length} boundary(ies) found`,
+    {
+      requestId,
+      raw: parseResult.data.boundaries,
+      filtered,
+    },
+  )
+  return { boundaries: filtered, ok: true }
 }
 
 function pageWindowText(pages: Page[], startPage: number, endPage: number): string {
   const out: string[] = []
   for (const page of pages) {
     if (page.number < startPage || page.number > endPage) continue
-    const body = page.blocks
-      .filter((b) => b.classification === 'body')
+    // Include body AND header/caption blocks: chapter titles often get
+    // classified as 'header' by the PDF parser heuristic, and the structure
+    // detector needs to SEE those titles to identify boundaries. Folio and
+    // footer (running page numbers / running headers) are still excluded.
+    const text = page.blocks
+      .filter(
+        (b) =>
+          b.classification === 'body' ||
+          b.classification === 'header' ||
+          b.classification === 'caption',
+      )
       .map((b) => b.text)
       .join(' ')
-    out.push(`--- page ${page.number} ---\n${body}`)
+    out.push(`--- page ${page.number} ---\n${text}`)
   }
   return out.join('\n')
 }
@@ -358,7 +387,7 @@ async function splitOversizedSpineSection(
   })
   if (!result.ok) return [section]
   try {
-    const parsed = structureResponseSchema.parse(JSON.parse(result.data))
+    const parsed = structureResponseSchema.parse(parseLlmJsonOrThrow(result.data))
     const cuts = parsed.boundaries
       .map((b) => b.boundaryPageNumber)
       .filter((n) => n > 1 && n <= section.blocks.length)

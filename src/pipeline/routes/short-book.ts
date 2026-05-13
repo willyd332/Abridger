@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { parseLlmJsonOrThrow } from '@/llm/parse-json'
 import { getPrompt } from '@/llm/prompts/loader'
 import type { Block, ParsedBook } from '@/parsers/types'
 
@@ -136,7 +137,7 @@ export async function executeShortBookRoute(
 
   let parsed: z.infer<typeof shortBookResponseSchema>
   try {
-    parsed = shortBookResponseSchema.parse(JSON.parse(result.data))
+    parsed = shortBookResponseSchema.parse(parseLlmJsonOrThrow(result.data))
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     emit({ kind: 'phase-error', phase: PHASE_NAME, error: `Short-book JSON invalid: ${message}` })

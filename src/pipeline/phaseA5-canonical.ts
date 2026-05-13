@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { LLMClient } from '@/llm/client'
+import { parseLlmJsonOrThrow } from '@/llm/parse-json'
 import { getPrompt } from '@/llm/prompts/loader'
 import type { ParsedBook } from '@/parsers/types'
 
@@ -98,7 +99,7 @@ export async function phaseA5Canonical(
 
   let parsed: z.infer<typeof responseSchema>
   try {
-    parsed = responseSchema.parse(JSON.parse(result.data))
+    parsed = responseSchema.parse(parseLlmJsonOrThrow(result.data))
   } catch (err) {
     emit?.({
       kind: 'phase-error',

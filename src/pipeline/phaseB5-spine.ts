@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { LLMClient } from '@/llm/client'
+import { parseLlmJsonOrThrow } from '@/llm/parse-json'
 import { getPrompt } from '@/llm/prompts/loader'
 
 import type { CanonicalPassage, Emit, NarrativeSpine, Section } from './types'
@@ -91,7 +92,7 @@ async function callSpine(
   })
   if (!result.ok) return null
   try {
-    return spineResponseSchema.parse(JSON.parse(result.data))
+    return spineResponseSchema.parse(parseLlmJsonOrThrow(result.data))
   } catch {
     return null
   }

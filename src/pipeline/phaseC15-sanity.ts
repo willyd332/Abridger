@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { DEFAULT_LLM_CONCURRENCY, mapWithLimit } from '@/lib/concurrency'
 import { LLMClient } from '@/llm/client'
+import { parseLlmJsonOrThrow } from '@/llm/parse-json'
 import { getPrompt } from '@/llm/prompts/loader'
 
 import type {
@@ -120,7 +121,7 @@ async function checkOne(
   }
 
   try {
-    const parsed = sanitySchema.parse(JSON.parse(result.data))
+    const parsed = sanitySchema.parse(parseLlmJsonOrThrow(result.data))
     if (!parsed.escalate) return decision
     return {
       ...decision,

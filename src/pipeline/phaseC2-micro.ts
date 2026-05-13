@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { DEFAULT_LLM_CONCURRENCY, mapWithLimit } from '@/lib/concurrency'
 import { LLMClient } from '@/llm/client'
+import { parseLlmJsonOrThrow } from '@/llm/parse-json'
 import { getPrompt } from '@/llm/prompts/loader'
 import type { Block } from '@/parsers/types'
 
@@ -334,7 +335,7 @@ async function microOne(
 
   let parsed: z.infer<typeof responseSchema>
   try {
-    parsed = responseSchema.parse(JSON.parse(result.data))
+    parsed = responseSchema.parse(parseLlmJsonOrThrow(result.data))
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     opts.emit?.({
