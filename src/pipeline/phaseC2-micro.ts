@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { mapWithLimit } from '@/lib/concurrency'
+import { DEFAULT_LLM_CONCURRENCY, mapWithLimit } from '@/lib/concurrency'
 import { LLMClient } from '@/llm/client'
 import { getPrompt } from '@/llm/prompts/loader'
 import type { Block } from '@/parsers/types'
@@ -20,7 +20,7 @@ import type {
 } from './types'
 
 const PHASE_NAME = 'C2-micro'
-const DEFAULT_CONCURRENCY = 2
+const DEFAULT_CONCURRENCY = DEFAULT_LLM_CONCURRENCY
 const MAX_SNAP_DISTANCE = 40
 const ORPHAN_LOOKAHEAD = 100
 const ORPHAN_PRONOUN_REGEX = /^(he|she|they|it|this|that|those)\b/i

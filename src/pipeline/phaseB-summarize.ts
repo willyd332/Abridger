@@ -1,13 +1,13 @@
 import { z } from 'zod'
 
-import { mapWithLimit } from '@/lib/concurrency'
+import { DEFAULT_LLM_CONCURRENCY, mapWithLimit } from '@/lib/concurrency'
 import { LLMClient } from '@/llm/client'
 import { getPrompt } from '@/llm/prompts/loader'
 
 import type { Emit, Section } from './types'
 
 const PHASE_NAME = 'B-summarize'
-const DEFAULT_CONCURRENCY = 2
+const DEFAULT_CONCURRENCY = DEFAULT_LLM_CONCURRENCY
 const SUMMARY_PLACEHOLDER = '[summary unavailable]'
 
 const NARRATIVE_FUNCTION_VALUES = [

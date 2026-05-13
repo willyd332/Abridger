@@ -9,7 +9,7 @@ import {
   pdf,
 } from '@react-pdf/renderer'
 
-import { mapWithLimit } from '@/lib/concurrency'
+import { DEFAULT_LLM_CONCURRENCY, mapWithLimit } from '@/lib/concurrency'
 import { LLMClient } from '@/llm/client'
 import type { Block, ParsedBook } from '@/parsers/types'
 
@@ -24,7 +24,7 @@ import type {
 } from '../types'
 
 const PHASE_NAME = 'D-pdf'
-const DEFAULT_BRACKET_CONCURRENCY = 3
+const DEFAULT_BRACKET_CONCURRENCY = DEFAULT_LLM_CONCURRENCY
 const WHOLE_SECTION_DELETION_INDEX = -1
 const FONT_FAMILY = 'EB Garamond'
 const FALLBACK_FONT_FAMILY = 'Times-Roman'

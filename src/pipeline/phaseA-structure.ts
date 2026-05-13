@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { DEFAULT_LLM_CONCURRENCY, mapWithLimit } from '@/lib/concurrency'
 import { LLMClient } from '@/llm/client'
 import { getPrompt } from '@/llm/prompts/loader'
 import type { Block, Page, ParsedBook } from '@/parsers/types'
@@ -226,9 +227,9 @@ async function detectFromLlmWindows(
   const warnings: string[] = []
   const collected: Array<Boundary & { source: 'llm' }> = []
 
-  for (let i = 0; i < windows.length; i += 1) {
-    if (aborted(opts.signal)) break
-    const win = windows[i]
+  let completed = 0
+  const results = await mapWithLimit(windows, DEFAULT_LLM_CONCURRENCY, async (win) => {
+    if (aborted(opts.signal)) return null
     const text = pageWindowText(book.pages, win.startPage, win.endPage)
     const out = await runStructureWindow(
       client,
@@ -238,11 +239,19 @@ async function detectFromLlmWindows(
       opts.signal,
       `phaseA-llm-${win.startPage}`,
     )
+    completed += 1
+    emitProgress(opts.emit, completed, windows.length)
+    return out
+  })
+
+  for (let i = 0; i < windows.length; i += 1) {
+    const win = windows[i]
+    const out = results[i]
+    if (!out) continue
     if (!out.ok) {
       warnings.push(`Structure LLM call failed for pages ${win.startPage}–${win.endPage}.`)
     }
     for (const b of out.boundaries) collected.push({ ...b, source: 'llm' })
-    emitProgress(opts.emit, i + 1, windows.length)
   }
 
   return { boundaries: collected, warnings }
@@ -259,12 +268,8 @@ async function llmCrossCheck(
   if (windows.length === 0) return { disagreementRatio: 0, llmBoundaries: [] }
   const sampleIdx = chooseSampleIndices(windows.length, opts.sampleRate)
 
-  let disagreements = 0
-  let comparisons = 0
-  const llmBoundaries: Boundary[] = []
-
-  for (const idx of sampleIdx) {
-    if (aborted(opts.signal)) break
+  const samples = await mapWithLimit(sampleIdx, DEFAULT_LLM_CONCURRENCY, async (idx) => {
+    if (aborted(opts.signal)) return null
     const win = windows[idx]
     const text = pageWindowText(book.pages, win.startPage, win.endPage)
     const out = await runStructureWindow(
@@ -275,6 +280,16 @@ async function llmCrossCheck(
       opts.signal,
       `phaseA-crosscheck-${win.startPage}`,
     )
+    return { idx, win, out }
+  })
+
+  let disagreements = 0
+  let comparisons = 0
+  const llmBoundaries: Boundary[] = []
+
+  for (const sample of samples) {
+    if (!sample) continue
+    const { win, out } = sample
     for (const b of out.boundaries) llmBoundaries.push(b)
     comparisons += 1
     const outlineInWindow = outlineBoundaries.filter(
@@ -416,12 +431,11 @@ export async function phaseAStructure(
       }
 
       const initial = buildSections(book.pages, spineSegments, 'spine', last)
-      const expanded: Section[] = []
-      for (const sec of initial) {
-        if (aborted(opts.signal)) break
-        const parts = await splitOversizedSpineSection(sec, client, spineBudget, { signal: opts.signal })
-        for (const p of parts) expanded.push(p)
-      }
+      const partsList = await mapWithLimit(initial, DEFAULT_LLM_CONCURRENCY, async (sec) => {
+        if (aborted(opts.signal)) return [sec]
+        return splitOversizedSpineSection(sec, client, spineBudget, { signal: opts.signal })
+      })
+      const expanded: Section[] = partsList.flat()
       const renumbered = expanded.map((s, i) => ({ ...s, order: i + 1 }))
       const usedLlm = renumbered.length !== initial.length
       emit?.({ kind: 'phase-end', phase: PHASE_NAME, durationMs: Date.now() - start })

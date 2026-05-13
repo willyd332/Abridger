@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 
-import { mapWithLimit } from '@/lib/concurrency'
+import { DEFAULT_LLM_CONCURRENCY, mapWithLimit } from '@/lib/concurrency'
 import { LLMClient } from '@/llm/client'
 import type { ParsedBook, Block } from '@/parsers/types'
 
@@ -15,7 +15,7 @@ import type {
 } from '../types'
 
 const PHASE_NAME = 'D-reconstruct-epub'
-const DEFAULT_BRACKET_CONCURRENCY = 3
+const DEFAULT_BRACKET_CONCURRENCY = DEFAULT_LLM_CONCURRENCY
 
 const CONTAINER_PATH = 'META-INF/container.xml'
 const NAMESPACE = {

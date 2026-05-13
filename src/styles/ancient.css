@@ -121,6 +121,48 @@
   color: var(--shell-ink-soft);
 }
 
+.shell-header__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.shell-header__est {
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+}
+
+.shell-header__info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--gilt-border, #b8860b);
+  background-color: transparent;
+  color: var(--shell-ink);
+  font-family:
+    'EB Garamond', Garamond, 'Adobe Garamond Pro', Sabon, 'Cormorant Garamond',
+    Georgia, 'Times New Roman', serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.shell-header__info:hover,
+.shell-header__info:focus-visible {
+  background-color: var(--gilt-border, #b8860b);
+  color: var(--shell-bg);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(184, 134, 11, 0.25);
+}
+
 .shell-main {
   flex: 1 1 auto;
   display: flex;
@@ -800,6 +842,19 @@
   line-height: 1.6;
   margin: 0 0 1rem 0;
   font-size: 1.02rem;
+}
+
+.welcome-overlay__link {
+  color: var(--shell-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--gilt-border, #b8860b);
+  text-underline-offset: 0.15em;
+  transition: color 0.15s ease;
+}
+
+.welcome-overlay__link:hover,
+.welcome-overlay__link:focus-visible {
+  color: var(--gilt-border, #b8860b);
 }
 
 .welcome-overlay__actions {

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { OPEN_WELCOME_EVENT } from '@/components/layout/WelcomeOverlay'
 import { ariaLiveProps } from '@/lib/a11y'
 
 interface AncientLibraryShellProps {
@@ -22,8 +23,19 @@ export function AncientLibraryShell({
               A careful machine for the abridgement of books
             </div>
           </div>
-          <div aria-hidden="true" style={{ fontSize: '0.85rem', letterSpacing: '0.08em' }}>
-            EST. MMXXVI
+          <div className="shell-header__meta">
+            <div aria-hidden="true" className="shell-header__est">
+              EST. MMXXVI
+            </div>
+            <button
+              type="button"
+              className="shell-header__info"
+              aria-label="About The Abridger"
+              title="About The Abridger"
+              onClick={() => window.dispatchEvent(new CustomEvent(OPEN_WELCOME_EVENT))}
+            >
+              ?
+            </button>
           </div>
         </header>
 
