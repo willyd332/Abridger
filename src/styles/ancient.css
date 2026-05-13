@@ -1700,43 +1700,66 @@
 
 .stats-ribbon {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-  gap: 1rem;
-  padding: 1.25rem 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0;
+  padding: 1.5rem 1rem;
   border: 1px solid var(--shell-rule);
   border-radius: var(--shell-radius-lg);
   background-color: rgba(255, 247, 223, 0.7);
   box-shadow: var(--shell-paper-shadow);
 }
 
-.stats-ribbon__cell {
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+  padding: 0.25rem 0.75rem;
+  border-right: 1px solid var(--shell-rule);
 }
 
-.stats-ribbon__numeral {
+.stat:last-child {
+  border-right: none;
+}
+
+@media (max-width: 720px) {
+  .stat {
+    border-right: none;
+    border-bottom: 1px solid var(--shell-rule);
+  }
+  .stat:last-child {
+    border-bottom: none;
+  }
+}
+
+.stat__value {
   font-family:
     'EB Garamond', Garamond, 'Adobe Garamond Pro', Sabon, 'Cormorant Garamond',
     Georgia, 'Times New Roman', serif;
-  font-size: 2.6rem;
+  font-size: 2.2rem;
   font-weight: 600;
-  color: var(--shell-gilt-deep);
-  line-height: 1;
+  line-height: 1.1;
+  color: var(--shell-ink);
+  font-variant-numeric: lining-nums proportional-nums;
+  font-feature-settings: 'lnum' 1, 'pnum' 1;
 }
 
-.stats-ribbon__secondary {
-  font-family:
-    'EB Garamond', Garamond, 'Adobe Garamond Pro', Sabon, 'Cormorant Garamond',
-    Georgia, 'Times New Roman', serif;
+.stat--primary .stat__value {
+  color: var(--shell-gilt-deep);
+}
+
+.stat--muted .stat__value {
   font-size: 1.6rem;
   color: var(--shell-ink);
 }
 
-.stats-ribbon__label {
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
+.stat__label {
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--shell-ink-soft);
-  margin-top: 0.25rem;
 }
 
 /* Download panel */

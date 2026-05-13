@@ -70,6 +70,7 @@ function App() {
   const progress = useAppStore(useShallow(selectProgress))
   const runRecord = useAppStore((state) => state.job?.run)
   const bookRecord = useAppStore((state) => state.job?.book)
+  const tokens = useAppStore(useShallow((state) => state.tokens))
 
   // Check for resumable runs on boot
   useEffect(() => {
@@ -232,13 +233,23 @@ function App() {
     if (stage !== 'running' || !runRecord) return
     if (runRecord.status !== 'done') return
     const originalPages = bookRecord?.parsed.pages.length ?? 0
+    const sectionRecords = getAppStore().getState().job?.sections ?? []
+    const droppedCount = sectionRecords.filter(
+      (s) =>
+        s.macroDecision?.verdict === 'DROP_TO_ONE_LINE' ||
+        s.macroDecision?.verdict === 'COMPRESS_TO_BRACKET',
+    ).length
+    const keptCount = sectionRecords.length - droppedCount
     setStats({
       originalPages,
-      abridgedPages: 0,
+      abridgedPages: Math.max(1, Math.round(originalPages * (keptCount / Math.max(1, sectionRecords.length)))),
       totalCostUsd: runRecord.cost.billedUsd,
+      totalTokens: tokens.promptTokens + tokens.completionTokens,
+      sectionsKept: keptCount,
+      sectionsDropped: droppedCount,
     })
     setStage('done')
-  }, [stage, runRecord, bookRecord])
+  }, [stage, runRecord, bookRecord, tokens.promptTokens, tokens.completionTokens])
 
   const modelMapping = useMemo<ModelMapping | undefined>(() => {
     if (runRecord?.modelMapping) return runRecord.modelMapping

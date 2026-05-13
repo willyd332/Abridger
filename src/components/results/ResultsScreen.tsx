@@ -47,10 +47,11 @@ export function ResultsScreen({ runId, stats, onStartOver, bookTitle }: ResultsS
       aria-label="Results"
     >
       <header className="results-screen__head">
-        <h2 className="results-screen__title drop-cap">A new edition</h2>
+        <h2 className="results-screen__title">The abridgement is ready.</h2>
         <p className="results-screen__lede">
-          The press has finished its work. The abridged file and a complete ledger of
-          every cut are ready for download.
+          {bookTitle ? <em>{bookTitle}</em> : 'Your book'} has been condensed.
+          Download the abridged file plus a Markdown ledger that records every
+          cut and the rationale behind it.
         </p>
       </header>
 
