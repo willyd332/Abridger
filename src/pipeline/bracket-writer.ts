@@ -281,7 +281,11 @@ export async function writeBracket(
       if (candidateText) {
         candidateText = truncateToWords(candidateText, budget.approxMaxWords)
       } else {
-        candidateText = `[bracket-writer failed; deleted ~${approxWordCount(request.deletedText)} words of source]`
+        // Final fallback: keep the marker short and quiet. The verbose
+        // "[bracket-writer failed; deleted ~N words of source]" string was
+        // leaking into the abridged book and alarming readers; an unavailable
+        // bracket is rare with Anthropic JSON-mode prefill in place.
+        candidateText = '[bracket unavailable]'
       }
     }
   }

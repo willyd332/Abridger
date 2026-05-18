@@ -64,9 +64,9 @@ export function WelcomeOverlay() {
             transition={{ duration: reduced ? 0.15 : 0.4, ease: 'easeOut' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="welcome-title" className="welcome-overlay__title">The Abridger</h2>
+            <h2 id="welcome-title" className="welcome-overlay__title">The Book Abridger</h2>
             <p className="welcome-overlay__body">
-              The Abridger turns long books into shorter ones using your own
+              The Book Abridger turns long books into shorter ones using your own
               Anthropic or OpenAI API key. Upload a PDF or EPUB, tell it what
               you are trying to get out of the book, and it produces an
               abridged version. Editorial brackets stand in for what was cut,
@@ -83,7 +83,7 @@ export function WelcomeOverlay() {
               dollars, depending on the models you pick.
             </p>
             <p className="welcome-overlay__body">
-              The Abridger is open source. Read the code, file an issue, or
+              The Book Abridger is open source. Read the code, file an issue, or
               fork it at{' '}
               <a
                 className="welcome-overlay__link"

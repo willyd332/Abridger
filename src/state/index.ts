@@ -1,6 +1,5 @@
 export type {
   RunStatus,
-  RouteName,
   FrontBackMatterHandling,
   PhaseStatusKind,
   PhaseStatus,
@@ -18,13 +17,27 @@ export type {
   OutputKind,
   OutputRecord,
   EventRecord,
+  OntologyRecord,
+  InclusionRecord,
+  DependenciesRecord,
 } from './types'
 export { PHASE_NAMES, defaultPhaseStatus, defaultSectionPhaseStatus } from './types'
 
 export { DB_NAME, DB_VERSION, getDb, closeDb, resetDbForTests } from './db'
 export type { AbridgerDb, AbridgerSchema } from './db'
 
-export { runs, books, sections, spine, brackets, outputs, events } from './persistence'
+export {
+  runs,
+  books,
+  sections,
+  spine,
+  brackets,
+  outputs,
+  events,
+  ontology,
+  inclusion,
+  dependencies,
+} from './persistence'
 
 export {
   findResumableRun,

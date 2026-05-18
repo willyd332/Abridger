@@ -32,11 +32,15 @@ import type {
   Usage,
 } from './types'
 
+// Anthropic model IDs require an exact dated form for non-Haiku tiers in
+// this build. Bare aliases like `claude-sonnet-4-6` are rejected with a
+// 400 invalid_request_error ("…is not a valid model name."), which is why
+// Phase O calls were failing while Phase A (cheap/Haiku, dated) succeeded.
 export const DEFAULT_MAPPING: RoleMapping = {
   anthropic: {
     cheap: 'claude-haiku-4-5-20251001',
-    smart: 'claude-sonnet-4-6',
-    reasoning: 'claude-opus-4-7',
+    smart: 'claude-sonnet-4-5-20250929',
+    reasoning: 'claude-opus-4-1-20250805',
   },
   openai: {
     cheap: 'gpt-4o-mini',
@@ -228,8 +232,14 @@ export class LLMClient {
     const sectionId = opts.metadata?.sectionId
     const startedAt = Date.now()
 
+    // Reserve budget. If the estimate would exceed the ceiling, the call
+    // PAUSES inside the meter until either (a) the ceiling is raised
+    // (cost.setCeiling), or (b) the user explicitly cancels via
+    // costMeter.cancelAllPending(). This replaces the previous "throw and
+    // abort the whole pipeline" behaviour with backpressure: in-flight
+    // calls stack up safely while the user decides whether to keep going.
     try {
-      this.costMeter.reserve(estimate)
+      await this.costMeter.reserveOrWait(estimate, opts.signal)
     } catch (err) {
       if (err instanceof BudgetExceededError) {
         return { ok: false, error: err.toLLMError(), retried: 0 }

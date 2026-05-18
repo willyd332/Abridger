@@ -99,22 +99,21 @@ function DropzoneIdle({ isDragActive }: { isDragActive: boolean }) {
     <div>
       <div
         style={{
-          fontSize: '1.05rem',
+          fontSize: '1.15rem',
           fontWeight: 500,
           color: 'var(--shell-ink)',
-          marginBottom: '0.35rem',
+          marginBottom: '0.25rem',
         }}
       >
-        {isDragActive ? 'Lay the book on the desk…' : 'Place a PDF or EPUB here'}
+        {isDragActive ? 'Drop it.' : 'Drop a PDF or EPUB'}
       </div>
       <div
         style={{
-          fontSize: '0.9rem',
+          fontSize: '0.85rem',
           color: 'var(--shell-ink-faint)',
-          fontStyle: 'italic',
         }}
       >
-        Drag and drop, or click to browse. Up to {formatBytes(MAX_SIZE_BYTES)}.
+        or click to browse — up to {formatBytes(MAX_SIZE_BYTES)}
       </div>
     </div>
   )

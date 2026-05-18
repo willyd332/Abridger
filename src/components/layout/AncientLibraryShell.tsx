@@ -26,10 +26,7 @@ export function AncientLibraryShell({
             onClick={() => onHome?.()}
             aria-label="Return to intake"
           >
-            <span className="shell-header__title">The Abridger</span>
-            <span className="shell-header__subtitle">
-              A careful machine for the abridgement of books
-            </span>
+            <span className="shell-header__title">Book Abridger</span>
           </button>
           <div className="shell-header__meta">
             <button
@@ -44,8 +41,8 @@ export function AncientLibraryShell({
             <button
               type="button"
               className="shell-header__info"
-              aria-label="About The Abridger"
-              title="About The Abridger"
+              aria-label="About The Book Abridger"
+              title="About The Book Abridger"
               onClick={() => window.dispatchEvent(new CustomEvent(OPEN_WELCOME_EVENT))}
             >
               ?
@@ -62,10 +59,7 @@ export function AncientLibraryShell({
 
         <footer className="shell-footer">
           <p className="shell-footer__note">
-            Your API key never leaves your browser. The Abridger is a
-            client-only site; calls go directly from this tab to your chosen
-            provider. Browser extensions can read anything on this page, so
-            prefer a scoped, spending-capped key.
+            Client-only. Your key never leaves the browser.
           </p>
           <ThemeToggle />
         </footer>

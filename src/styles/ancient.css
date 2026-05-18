@@ -1,21 +1,24 @@
 /* Ancient-library theme tokens, textures, and decorative primitives. */
 
 :root {
-  --shell-bg: #f5ecd6;
-  --shell-bg-edge: #e0cf99;
-  --shell-ink: #2a1810;
-  --shell-ink-soft: #5a4634;
-  --shell-ink-faint: #7d6650;
+  /* Dark-warm canvas — matches the building screen aesthetic. */
+  --shell-bg: #16110b;
+  --shell-bg-edge: #0d0905;
+  --shell-ink: #f4e6c6;
+  --shell-ink-soft: rgba(244, 230, 198, 0.72);
+  --shell-ink-faint: rgba(244, 230, 198, 0.48);
   --shell-gilt: #b8860b;
   --shell-gilt-soft: #d8aa28;
-  --shell-gilt-deep: #705208;
-  --shell-rule: rgba(42, 24, 16, 0.18);
-  --shell-paper-shadow: 0 1px 0 rgba(255, 245, 220, 0.6) inset,
-    0 18px 40px -28px rgba(42, 24, 16, 0.45);
-  --shell-card-bg: #faf2dc;
-  --shell-card-bg-hover: #fff7df;
+  --shell-gilt-deep: #ffe291;
+  --shell-rule: rgba(184, 134, 11, 0.22);
+  --shell-edge: rgba(184, 134, 11, 0.35);
+  --shell-paper-shadow:
+    0 1px 0 rgba(244, 230, 198, 0.05) inset,
+    0 18px 40px -22px rgba(0, 0, 0, 0.65);
+  --shell-card-bg: #1f1812;
+  --shell-card-bg-hover: #241c14;
   --shell-texture-url: url('/textures/paper-grain.svg');
-  --shell-texture-opacity: 0.07;
+  --shell-texture-opacity: 0.04;
   --shell-radius: 6px;
   --shell-radius-lg: 12px;
 }
@@ -64,15 +67,11 @@
   inset: 0;
   background:
     radial-gradient(
-      circle at 50% 0%,
-      rgba(255, 240, 200, 0.6) 0%,
-      rgba(245, 236, 214, 0) 60%
+      ellipse at 30% 20%,
+      rgba(80, 60, 30, 0.35) 0%,
+      transparent 60%
     ),
-    radial-gradient(
-      circle at 100% 100%,
-      rgba(184, 134, 11, 0.08) 0%,
-      rgba(245, 236, 214, 0) 55%
-    );
+    linear-gradient(180deg, #16110b 0%, #0d0905 100%);
   pointer-events: none;
   z-index: 0;
 }
@@ -293,21 +292,23 @@
     background-color 220ms ease,
     border-color 220ms ease,
     box-shadow 220ms ease;
-  box-shadow: 0 1px 0 rgba(255, 245, 220, 0.5) inset,
-    0 1px 0 rgba(42, 24, 16, 0.04);
+  box-shadow:
+    0 1px 0 rgba(244, 230, 198, 0.06) inset,
+    0 1px 0 rgba(0, 0, 0, 0.3);
 }
 
 .gilt-button:hover:not(:disabled) {
   transform: translateY(-1px);
   border-color: var(--shell-gilt-soft);
   box-shadow:
-    0 1px 0 rgba(255, 245, 220, 0.6) inset,
-    0 6px 14px -10px rgba(184, 134, 11, 0.55);
+    0 1px 0 rgba(244, 230, 198, 0.08) inset,
+    0 6px 18px -8px rgba(184, 134, 11, 0.6);
 }
 
 .gilt-button--primary {
-  --gilt-button-bg: #faf2dc;
+  --gilt-button-bg: rgba(184, 134, 11, 0.15);
   border-color: var(--shell-gilt);
+  color: var(--shell-gilt-deep);
 }
 
 .gilt-button--primary[data-glow='true'] {
@@ -457,10 +458,10 @@
 
 .dropzone {
   position: relative;
-  border: 1.5px dashed var(--shell-rule);
+  border: 1.5px dashed var(--shell-edge, rgba(184, 134, 11, 0.35));
   border-radius: var(--shell-radius-lg);
   padding: 1.6rem 1.25rem;
-  background-color: rgba(255, 247, 223, 0.5);
+  background-color: rgba(244, 230, 198, 0.04);
   transition:
     border-color 220ms ease,
     background-color 220ms ease,
@@ -472,7 +473,7 @@
 .dropzone:hover,
 .dropzone[data-active='true'] {
   border-color: var(--shell-gilt);
-  background-color: rgba(244, 224, 138, 0.3);
+  background-color: rgba(255, 226, 145, 0.08);
 }
 
 .dropzone::before,
@@ -516,9 +517,9 @@
 .parchment-textarea {
   width: 100%;
   padding: 0.7rem 0.85rem;
-  border: 1px solid var(--shell-rule);
+  border: 1px solid var(--shell-edge, rgba(184, 134, 11, 0.35));
   border-radius: var(--shell-radius);
-  background-color: rgba(255, 250, 232, 0.7);
+  background-color: rgba(244, 230, 198, 0.04);
   color: var(--shell-ink);
   font-family: inherit;
   font-size: 1rem;
@@ -530,7 +531,7 @@
 .parchment-textarea:focus {
   outline: none;
   border-color: var(--shell-gilt);
-  background-color: #fff;
+  background-color: rgba(244, 230, 198, 0.07);
 }
 
 .parchment-textarea {
@@ -1224,10 +1225,10 @@
 }
 
 .past-runs-row {
-  border: 1px solid var(--shell-rule);
+  border: 1px solid var(--shell-edge, rgba(184, 134, 11, 0.35));
   border-radius: 6px;
   padding: 0.85rem 1rem;
-  background-color: rgba(255, 250, 235, 0.55);
+  background-color: rgba(244, 230, 198, 0.05);
 }
 
 .past-runs-row__head {
@@ -1268,17 +1269,17 @@
 }
 
 .past-runs-row__status--done {
-  color: #2a6b2a;
+  color: #86c08b;
 }
 
 .past-runs-row__status--in_progress,
 .past-runs-row__status--paused {
-  color: #b8860b;
+  color: #f0c167;
 }
 
 .past-runs-row__status--errored,
 .past-runs-row__status--cancelled {
-  color: #a01e1e;
+  color: #ff7060;
 }
 
 .past-runs-row__date,

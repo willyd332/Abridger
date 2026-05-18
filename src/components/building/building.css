@@ -1,0 +1,333 @@
+/* Building screen — dark warm canvas, two-pane drama. */
+
+.building {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse at 30% 40%,
+      rgba(80, 60, 30, 0.45) 0%,
+      transparent 60%
+    ),
+    linear-gradient(180deg, #16110b 0%, #0d0905 100%);
+  color: #f4e6c6;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  z-index: 10;
+  overflow: hidden;
+}
+
+.building__pane {
+  position: relative;
+  overflow: hidden;
+}
+
+.building__pane--left {
+  border-right: 1px solid rgba(184, 134, 11, 0.18);
+}
+
+.building__overlay {
+  position: absolute;
+  top: 1.4rem;
+  left: 1.4rem;
+  right: 1.4rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.building__overlay-left {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.building__title {
+  font-family:
+    'EB Garamond', Garamond, Georgia, serif;
+  font-size: 1.4rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  margin: 0;
+  color: #f4e6c6;
+}
+
+.building__status {
+  font-size: 0.88rem;
+  color: rgba(244, 230, 198, 0.7);
+  font-style: italic;
+  letter-spacing: 0.01em;
+  max-width: 30rem;
+}
+
+.building__overlay-right {
+  pointer-events: auto;
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.building__cost {
+  font-size: 0.82rem;
+  color: rgba(244, 230, 198, 0.7);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.building__cancel {
+  background: transparent;
+  border: 1px solid rgba(184, 134, 11, 0.5);
+  color: #f4e6c6;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.building__cancel:hover {
+  background: rgba(184, 134, 11, 0.18);
+  border-color: rgba(184, 134, 11, 0.9);
+}
+
+/* Ontology construction viz (left pane) */
+
+.construction-scroll {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(184, 134, 11, 0.45) transparent;
+}
+
+.construction-scroll::-webkit-scrollbar {
+  width: 7px;
+}
+
+.construction-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.construction-scroll::-webkit-scrollbar-thumb {
+  background: rgba(184, 134, 11, 0.4);
+  border-radius: 3px;
+}
+
+.construction-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(184, 134, 11, 0.7);
+}
+
+.construction-svg {
+  width: 100%;
+  display: block;
+}
+
+.construction-line {
+  stroke: rgba(184, 134, 11, 0.55);
+  stroke-width: 1.4;
+  fill: none;
+  stroke-linecap: round;
+}
+
+.construction-line--summarized {
+  stroke: rgba(244, 200, 90, 0.95);
+  stroke-width: 1.7;
+}
+
+.construction-node {
+  fill: rgba(244, 230, 198, 0.85);
+  stroke: rgba(184, 134, 11, 0.7);
+  stroke-width: 1.2;
+}
+
+.construction-node--summarized {
+  fill: rgba(255, 226, 145, 1);
+  filter: drop-shadow(0 0 6px rgba(244, 200, 90, 0.6));
+}
+
+.construction-spine {
+  stroke: rgba(244, 230, 198, 0.85);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.construction-node--hovered {
+  fill: rgba(255, 240, 200, 1);
+  stroke: rgba(244, 200, 90, 1);
+  stroke-width: 1.6;
+  filter: drop-shadow(0 0 8px rgba(244, 200, 90, 0.75));
+}
+
+.construction-tooltip-bg {
+  fill: rgba(20, 14, 8, 0.94);
+  stroke: rgba(184, 134, 11, 0.55);
+  stroke-width: 0.9;
+}
+
+.construction-tooltip-text {
+  fill: #f4e6c6;
+  font-family: 'EB Garamond', Garamond, Georgia, serif;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
+/* Cascade (right pane) */
+
+.cascade {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* fade bands top + bottom */
+  -webkit-mask-image:
+    linear-gradient(180deg, transparent 0%, black 8%, black 78%, transparent 100%);
+  mask-image:
+    linear-gradient(180deg, transparent 0%, black 8%, black 78%, transparent 100%);
+}
+
+.cascade__line {
+  position: absolute;
+  top: -2rem;
+  padding: 0 1rem;
+  box-sizing: border-box;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  letter-spacing: 0.005em;
+  white-space: normal;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  font-family:
+    'EB Garamond', Garamond, Georgia, serif;
+  font-style: italic;
+  will-change: transform, opacity, filter;
+  transform-origin: center center;
+}
+
+.cascade__line--book {
+  color: rgba(248, 232, 197, 0.93);
+  text-shadow: 0 0 12px rgba(184, 134, 11, 0.22);
+}
+
+.cascade__line--reasoning {
+  color: rgba(132, 200, 220, 0.93);
+  font-style: normal;
+  text-shadow: 0 0 14px rgba(60, 160, 200, 0.26);
+}
+
+/* Depth tier accents — sharpness, weight, glow */
+.cascade__line--far {
+  font-weight: 300;
+  text-shadow: 0 0 18px rgba(184, 134, 11, 0.14);
+}
+
+.cascade__line--mid {
+  font-weight: 400;
+}
+
+.cascade__line--near {
+  font-weight: 500;
+  text-shadow:
+    0 0 6px rgba(184, 134, 11, 0.35),
+    0 0 18px rgba(184, 134, 11, 0.18);
+}
+
+.cascade__line--reasoning.cascade__line--near {
+  text-shadow:
+    0 0 8px rgba(60, 160, 200, 0.45),
+    0 0 22px rgba(60, 160, 200, 0.22);
+}
+
+/* Held by the pointer — pop forward, full opacity, no blur, soft halo. */
+.cascade__line--held {
+  filter: none !important;
+  opacity: 1 !important;
+  color: #f8e8c5;
+  text-shadow:
+    0 0 10px rgba(244, 200, 90, 0.55),
+    0 0 28px rgba(184, 134, 11, 0.28);
+}
+
+.cascade__line--book::before {
+  content: '“ ';
+  opacity: 0.55;
+}
+
+.cascade__line--book::after {
+  content: ' ”';
+  opacity: 0.55;
+}
+
+/* Stats ticker (bottom-right of building screen) */
+
+.stats-ticker {
+  /* Pinned to the viewport so the ticker persists across stages (building,
+     curating, exporting) and keeps climbing on every LLM call. */
+  position: fixed;
+  right: 1.4rem;
+  bottom: 1.2rem;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.7rem 1rem 0.6rem;
+  background: rgba(20, 14, 8, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(184, 134, 11, 0.25);
+  border-radius: 0.55rem;
+  min-width: 11.5rem;
+  font-family:
+    ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Mono', monospace;
+  pointer-events: none;
+}
+
+.stats-ticker__row {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.stats-ticker__label {
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(244, 230, 198, 0.45);
+}
+
+.stats-ticker__value {
+  text-align: right;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 226, 145, 0.96);
+  font-feature-settings: 'tnum';
+}
+
+.stats-ticker__ceiling {
+  color: rgba(244, 230, 198, 0.4);
+  font-size: 0.78rem;
+  margin-left: 0.15rem;
+}
+
+@media (max-width: 760px) {
+  .building {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+  .building__pane--left {
+    border-right: none;
+    border-bottom: 1px solid rgba(184, 134, 11, 0.18);
+  }
+  .stats-ticker {
+    right: 0.8rem;
+    bottom: 0.8rem;
+    min-width: 9.5rem;
+  }
+}

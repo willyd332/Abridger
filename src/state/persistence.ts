@@ -2,8 +2,11 @@ import { getDb } from './db'
 import type {
   BookRecord,
   BracketRecord,
+  DependenciesRecord,
   EventRecord,
+  InclusionRecord,
   NewRun,
+  OntologyRecord,
   OutputRecord,
   RunRecord,
   RunStatus,
@@ -265,6 +268,99 @@ export const outputs = {
   async delete(runId: string, kind: OutputRecord['kind']): Promise<void> {
     const db = await getDb()
     await db.delete('outputs', [runId, kind])
+  },
+}
+
+export const ontology = {
+  async put(record: OntologyRecord): Promise<OntologyRecord> {
+    const db = await getDb()
+    await db.put('ontology', record)
+    return record
+  },
+
+  async get(runId: string): Promise<OntologyRecord | null> {
+    const db = await getDb()
+    const record = await db.get('ontology', runId)
+    return record ?? null
+  },
+
+  async delete(runId: string): Promise<void> {
+    const db = await getDb()
+    await db.delete('ontology', runId)
+  },
+}
+
+export const inclusion = {
+  async put(record: InclusionRecord): Promise<InclusionRecord> {
+    const db = await getDb()
+    await db.put('inclusion', record)
+    return record
+  },
+
+  async get(runId: string): Promise<InclusionRecord | null> {
+    const db = await getDb()
+    const record = await db.get('inclusion', runId)
+    return record ?? null
+  },
+
+  async update(
+    runId: string,
+    mutate: (current: Record<string, boolean>) => Record<string, boolean>,
+  ): Promise<InclusionRecord> {
+    const db = await getDb()
+    const tx = db.transaction('inclusion', 'readwrite')
+    const current = (await tx.store.get(runId)) ?? {
+      runId,
+      inclusion: {},
+      updatedAt: 0,
+    }
+    const next: InclusionRecord = {
+      runId,
+      inclusion: mutate(current.inclusion),
+      updatedAt: now(),
+    }
+    await tx.store.put(next)
+    await tx.done
+    return next
+  },
+
+  async delete(runId: string): Promise<void> {
+    const db = await getDb()
+    await db.delete('inclusion', runId)
+  },
+}
+
+export const dependencies = {
+  async put(record: DependenciesRecord): Promise<DependenciesRecord> {
+    const db = await getDb()
+    await db.put('dependencies', record)
+    return record
+  },
+
+  async get(runId: string, nodeId: string): Promise<DependenciesRecord | null> {
+    const db = await getDb()
+    const record = await db.get('dependencies', [runId, nodeId])
+    return record ?? null
+  },
+
+  async listByRun(runId: string): Promise<DependenciesRecord[]> {
+    const db = await getDb()
+    return db.getAllFromIndex('dependencies', 'by-run', runId)
+  },
+
+  async deleteByRun(runId: string): Promise<number> {
+    const db = await getDb()
+    const tx = db.transaction('dependencies', 'readwrite')
+    const index = tx.store.index('by-run')
+    let cursor = await index.openCursor(runId)
+    let count = 0
+    while (cursor) {
+      await cursor.delete()
+      count += 1
+      cursor = await cursor.continue()
+    }
+    await tx.done
+    return count
   },
 }
 

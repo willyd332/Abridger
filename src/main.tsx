@@ -4,14 +4,15 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import './styles/globals.css'
 import './styles/ancient.css'
+import './styles/intake.css'
 
 // The Anthropic and OpenAI SDKs reach for the Node Buffer global at request
 // time (Buffer.byteLength for content-length, Buffer.from for body framing).
-// We polyfill before anything else loads.
+// We unconditionally overwrite any earlier partial shim (e.g. the defensive
+// stub in src/llm/prompts/loader.ts that may have installed itself during
+// the import chain) with the full Buffer implementation.
 const g = globalThis as unknown as { Buffer?: typeof Buffer; process?: { env?: Record<string, string> } }
-if (typeof g.Buffer === 'undefined') {
-  g.Buffer = Buffer
-}
+g.Buffer = Buffer
 if (typeof g.process === 'undefined') {
   g.process = { env: {} }
 }

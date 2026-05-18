@@ -8,7 +8,10 @@ import type { Block, Page, ParsedBook } from '@/parsers/types'
 
 import type { Emit, Section, SectionSource } from './types'
 
-const DEFAULT_WINDOW_PAGES = 10
+// 50-page windows give a smarter model enough surrounding context to
+// distinguish true chapter breaks from within-chapter subsection headings.
+// Haiku-on-10-page windows was over-flagging subsections as chapters.
+const DEFAULT_WINDOW_PAGES = 50
 const DEFAULT_LLM_CROSS_CHECK_SAMPLE_RATE = 0.1
 const HYBRID_DISAGREEMENT_RATIO = 0.3
 const BOUNDARY_TOLERANCE_PAGES = 2
@@ -273,14 +276,55 @@ async function detectFromLlmWindows(
     return out
   })
 
+  // First pass: collect any successful boundaries; flag windows that errored.
+  const retryIndices: number[] = []
   for (let i = 0; i < windows.length; i += 1) {
-    const win = windows[i]
     const out = results[i]
     if (!out) continue
     if (!out.ok) {
-      warnings.push(`Structure LLM call failed for pages ${win.startPage}–${win.endPage}.`)
+      retryIndices.push(i)
+      continue
     }
     for (const b of out.boundaries) collected.push({ ...b, source: 'llm' })
+  }
+
+  // Second pass: retry any windows whose first call failed. Transient API
+  // hiccups can wipe out a window's boundaries silently; one retry usually
+  // recovers them.
+  if (retryIndices.length > 0 && !aborted(opts.signal)) {
+    opts.emit?.({
+      kind: 'phase-progress',
+      phase: PHASE_NAME,
+      completed: windows.length,
+      total: windows.length + retryIndices.length,
+    })
+    const retryResults = await mapWithLimit(
+      retryIndices,
+      DEFAULT_LLM_CONCURRENCY,
+      async (idx) => {
+        if (aborted(opts.signal)) return null
+        const win = windows[idx]
+        const text = pageWindowText(book.pages, win.startPage, win.endPage)
+        const out = await runStructureWindow(
+          client,
+          text,
+          win.startPage,
+          win.endPage,
+          opts.signal,
+          `phaseA-llm-retry-${win.startPage}`,
+        )
+        return { idx, out }
+      },
+    )
+    for (const r of retryResults) {
+      if (!r || !r.out) continue
+      const win = windows[r.idx]
+      if (!r.out.ok) {
+        warnings.push(`Structure LLM call failed for pages ${win.startPage}–${win.endPage} (after retry).`)
+        continue
+      }
+      for (const b of r.out.boundaries) collected.push({ ...b, source: 'llm' })
+    }
   }
 
   return { boundaries: collected, warnings }
@@ -441,38 +485,26 @@ export async function phaseAStructure(
   try {
     if (book.format === 'epub') {
       const spineSegments = spineBoundaries(book)
-      if (spineSegments.length === 0) {
-        warnings.push('EPUB spine could not be derived; falling back to whole-book section.')
-        const blocks = book.pages.flatMap((p) => p.blocks)
-        const section: Section = {
-          id: 'sec-001-whole-book',
-          order: 1,
-          title: book.title || 'Untitled',
-          startPage: 1,
-          endPage: last,
-          blocks,
-          rawText: bodyTextFor(blocks),
-          source: 'spine',
-          confidence: 0.5,
-        }
+      if (spineSegments.length > 0) {
+        const initial = buildSections(book.pages, spineSegments, 'spine', last)
+        const partsList = await mapWithLimit(initial, DEFAULT_LLM_CONCURRENCY, async (sec) => {
+          if (aborted(opts.signal)) return [sec]
+          return splitOversizedSpineSection(sec, client, spineBudget, { signal: opts.signal })
+        })
+        const expanded: Section[] = partsList.flat()
+        const renumbered = expanded.map((s, i) => ({ ...s, order: i + 1 }))
+        const usedLlm = renumbered.length !== initial.length
         emit?.({ kind: 'phase-end', phase: PHASE_NAME, durationMs: Date.now() - start })
-        return { sections: [section], source: 'spine', warnings }
+        return {
+          sections: renumbered,
+          source: usedLlm ? 'hybrid' : 'spine',
+          warnings,
+        }
       }
-
-      const initial = buildSections(book.pages, spineSegments, 'spine', last)
-      const partsList = await mapWithLimit(initial, DEFAULT_LLM_CONCURRENCY, async (sec) => {
-        if (aborted(opts.signal)) return [sec]
-        return splitOversizedSpineSection(sec, client, spineBudget, { signal: opts.signal })
-      })
-      const expanded: Section[] = partsList.flat()
-      const renumbered = expanded.map((s, i) => ({ ...s, order: i + 1 }))
-      const usedLlm = renumbered.length !== initial.length
-      emit?.({ kind: 'phase-end', phase: PHASE_NAME, durationMs: Date.now() - start })
-      return {
-        sections: renumbered,
-        source: usedLlm ? 'hybrid' : 'spine',
-        warnings,
-      }
+      // No spine — fall through to LLM-windowing detection (same path as PDFs).
+      // We don't fabricate page-range labels here; the model produces real
+      // section titles for each detected boundary.
+      warnings.push('EPUB spine could not be derived; using LLM windowing to detect chapters.')
     }
 
     const outlineNodes = opts.outline ?? null
@@ -523,8 +555,23 @@ export async function phaseAStructure(
     }))
     const deduped = dedupeNearbyBoundaries(converted, BOUNDARY_DEDUPE_PAGES)
     if (deduped.length === 0) {
-      deduped.push({ startPage: 1, title: book.title || 'Untitled', confidence: 0.3 })
-    } else if (deduped[0].startPage > 1) {
+      // Structure detection genuinely found zero boundaries across every
+      // window in the book. This is a real failure (likely transient API
+      // errors or rate-limit drops), not a feature to paper over with
+      // fabricated page-range labels. Surface as a real phase error so the
+      // user knows to retry rather than getting a tree of "pp. 1–10" leaves.
+      emit?.({
+        kind: 'phase-error',
+        phase: PHASE_NAME,
+        error:
+          'Structure detection returned zero chapter boundaries across the entire book. ' +
+          'This usually means LLM calls failed or were rate-limited. Retry the run.',
+      })
+      throw new Error(
+        'phaseA-structure: zero boundaries detected across all windows',
+      )
+    }
+    if (deduped[0].startPage > 1) {
       deduped.unshift({ startPage: 1, title: 'Opening', confidence: 0.3 })
     }
     const avgConfidence = deduped.reduce((s, b) => s + b.confidence, 0) / deduped.length

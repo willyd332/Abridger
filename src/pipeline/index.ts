@@ -1,14 +1,6 @@
 export type {
-  BookContext,
   BracketLengthHint,
-  CanonicalPassage,
   Emit,
-  MacroDecision,
-  MacroVerdict,
-  MicroDecision,
-  MicroDeletion,
-  MicroDeletionBracketHint,
-  MicroDeletionRejectionReason,
   NarrativeFunction,
   NarrativeSpine,
   PhaseEvent,
@@ -21,45 +13,56 @@ export type {
 export { phaseAStructure } from './phaseA-structure'
 export type { OutlineNode, PhaseAOptions, PhaseAResult } from './phaseA-structure'
 
-export { phaseA5Canonical } from './phaseA5-canonical'
-export type { PhaseA5Options } from './phaseA5-canonical'
-
-export { phaseBSummarize } from './phaseB-summarize'
-export type { PhaseBOptions } from './phaseB-summarize'
-
-export { phaseB5Spine } from './phaseB5-spine'
-export type { PhaseB5Options } from './phaseB5-spine'
-
-export { phaseC1Macro } from './phaseC1-macro'
-export type { PhaseC1Options } from './phaseC1-macro'
-
-export { phaseC15Sanity } from './phaseC15-sanity'
-export type { PhaseC15Options } from './phaseC15-sanity'
-
-export { phaseC2Micro } from './phaseC2-micro'
-export type { PhaseC2Options } from './phaseC2-micro'
-
 export { writeBracket, extractNamedTerms } from './bracket-writer'
 export type { BracketRequest, BracketResult, BracketUsage } from './bracket-writer'
 
 export { getPrecedingContext, getFollowingContext } from './bracket-helpers'
 
-export { reconstructEpub } from './phaseD-reconstruct/epub'
-export type {
-  ReconstructEpubInput,
-  ReconstructEpubOptions,
-  ReconstructEpubOutput,
-  ReconstructEpubStats,
-  ReconstructedBracket,
-} from './phaseD-reconstruct/epub'
+export { buildOntology, PHASE_O_NAME } from './ontology/build'
+export type { PhaseOOptions, PhaseOInput } from './ontology/build'
 
-// NOTE: `reconstructPdf` is intentionally NOT re-exported here. The PDF
-// reflow path pulls in @react-pdf/renderer (~2 MB), so it is lazy-imported
-// from `@/pipeline/phaseD-reconstruct/pdf-reflow` only when a run actually
-// produces a PDF. Importers should hit the module directly.
+export { summarizeOntology } from './ontology/summarize'
+export type { PhaseSOptions, PhaseSResult } from './ontology/summarize'
+
+export { buildFragments, generateBrackets } from './ontology/export'
+export type { ExportInputs } from './ontology/export'
+
+export { exportToPdf } from './ontology/export-pdf'
+export type { PdfExportInput, PdfExportOutput } from './ontology/export-pdf'
+
+export { exportToEpub } from './ontology/export-epub'
+export type { EpubExportInput, EpubExportOutput } from './ontology/export-epub'
+
+export { findDependencies } from './ontology/find-dependencies'
+export type { FindDependenciesOptions } from './ontology/find-dependencies'
+
+export { suggestAbridgement } from './ontology/suggest-abridgement'
+export type { SuggestOptions, SuggestResult } from './ontology/suggest-abridgement'
+
 export type {
-  ReconstructPdfInput,
-  ReconstructPdfOptions,
-  ReconstructPdfOutput,
-  ReconstructPdfStats,
-} from './phaseD-reconstruct/pdf-reflow'
+  OntologyNode,
+  OntologyTree,
+  NodeSummary,
+  NodeDependencies,
+  NodeDependency,
+  Fragment,
+  InclusionState,
+  OntologySource,
+} from './ontology/types'
+
+export {
+  bytesToLengthHint,
+  LEAF_BYTE_BUDGET,
+  MAX_CHILDREN_PER_NODE,
+  MAX_TREE_DEPTH,
+} from './ontology/types'
+
+export {
+  startOntologyRun,
+} from './ontology/orchestrate'
+export type {
+  StartOntologyRunInput,
+  StartOntologyRunResult,
+  OntologyRunHandle,
+  OntologyRunCompletion,
+} from './ontology/orchestrate'

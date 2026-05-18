@@ -1,13 +1,19 @@
+import { Buffer as RealBuffer } from 'buffer'
 import matter from 'gray-matter'
 import type { Role } from '../types'
 
-// The Buffer polyfill is installed globally in src/main.tsx. We leave a
-// defensive fallback here for test environments (vitest under jsdom) that
-// import this module directly without the main entry running first.
+// gray-matter calls Buffer.from at module import time. The main entry
+// (src/main.tsx) installs the full Buffer global, but if this module is
+// imported in a context where main hasn't run yet (e.g. vitest/jsdom, or
+// during the ES-module import chain before main's body executes), Buffer
+// would be missing. Install the full implementation defensively — note we
+// install the real Buffer from the `buffer` package, not a partial stub,
+// because callers downstream (the Anthropic/OpenAI SDKs) use
+// Buffer.byteLength as well as Buffer.from.
 function ensureBufferShim(): void {
-  const g = globalThis as unknown as { Buffer?: { from: (input: unknown) => unknown } }
-  if (typeof g.Buffer === 'undefined') {
-    g.Buffer = { from: (input: unknown) => input }
+  const g = globalThis as unknown as { Buffer?: typeof RealBuffer }
+  if (typeof g.Buffer === 'undefined' || typeof g.Buffer.byteLength !== 'function') {
+    g.Buffer = RealBuffer
   }
 }
 ensureBufferShim()
@@ -18,6 +24,7 @@ export type PromptMeta = {
   role: Role
   temperature: number
   responseFormat: PromptResponseFormat
+  maxTokens?: number
 }
 
 export type LoadedPrompt = {
@@ -50,6 +57,7 @@ function normalizeMeta(name: string, data: Record<string, unknown>): PromptMeta 
   const role = data.role
   const temperature = data.temperature
   const responseFormat = data.responseFormat
+  const maxTokens = data.maxTokens
 
   if (!isRole(role)) {
     throw new Error(`Prompt "${name}" front-matter: invalid or missing "role"`)
@@ -60,7 +68,14 @@ function normalizeMeta(name: string, data: Record<string, unknown>): PromptMeta 
   if (!isResponseFormat(responseFormat)) {
     throw new Error(`Prompt "${name}" front-matter: invalid or missing "responseFormat"`)
   }
-  return { role, temperature, responseFormat }
+  const meta: PromptMeta = { role, temperature, responseFormat }
+  if (maxTokens !== undefined) {
+    if (typeof maxTokens !== 'number' || !Number.isFinite(maxTokens) || maxTokens <= 0) {
+      throw new Error(`Prompt "${name}" front-matter: "maxTokens" must be a positive number`)
+    }
+    meta.maxTokens = maxTokens
+  }
+  return meta
 }
 
 const cache = new Map<string, LoadedPrompt>()

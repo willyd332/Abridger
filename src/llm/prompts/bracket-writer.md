@@ -33,10 +33,12 @@ You will be told a target length. Treat it as a budget, not a target:
 
 | Hint | Range | Use for |
 |------|-------|---------|
-| `one-line` | one short sentence (~30 words) | A whole minor section dropped (`DROP_TO_ONE_LINE`); a small inline cut |
-| `short` | 2-4 sentences (~40-110 words) | A whole section compressed (`COMPRESS_TO_BRACKET`, dense); a normal inline cut |
+| `one-line` | **exactly one sentence, no more than ~25 words (≤140 characters).** Hard cap. | Every paragraph-level inline cut; a whole minor section dropped (`DROP_TO_ONE_LINE`) |
+| `short` | 2-4 sentences (~40-110 words) | A whole section compressed (`COMPRESS_TO_BRACKET`, dense) |
 | `medium` | 1-2 paragraphs (~150-380 words) | A whole chapter compressed where multiple threads need preserving |
 | `long` | up to ~2 pages (~500-1100 words) | A whole chapter compressed where the chapter does heavy structural work; macro-scope only |
+
+For `one-line` brackets in particular: write **one** sentence. Not two. The bracket sits inside a redacted region whose visual height fits roughly that many words; longer output gets hard-truncated and reads poorly.
 
 The `long` budget is only available for macro-scope (whole-section) brackets.
 

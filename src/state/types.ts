@@ -1,17 +1,16 @@
 import type { ParsedBook, BookFormat } from '@/parsers/types'
 import type {
-  CanonicalPassage,
-  MacroDecision,
-  MicroDecision,
   NarrativeSpine,
   PhaseEvent,
   Section,
 } from '@/pipeline/types'
+import type {
+  NodeDependencies,
+  OntologyTree,
+} from '@/pipeline/ontology/types'
 import type { CostCeiling, Provider, Role } from '@/llm/types'
 
 export type RunStatus = 'in_progress' | 'paused' | 'done' | 'cancelled' | 'errored'
-
-export type RouteName = 'short-book' | 'normal-book' | 'long-book' | 'no-chapter-book'
 
 export type FrontBackMatterHandling = 'keep' | 'abridge' | 'drop'
 
@@ -27,7 +26,7 @@ export type PhaseStatus = {
   costBilled?: number
 }
 
-export type PhaseName = 'A' | 'A5' | 'B' | 'B5' | 'C1' | 'C15' | 'C2' | 'D'
+export type PhaseName = 'A' | 'A5' | 'O' | 'S-leaf' | 'S-internal'
 
 export type SectionPhaseStatus = Record<PhaseName, PhaseStatus>
 
@@ -41,7 +40,6 @@ export type RunRecord = {
   updatedAt: number
   status: RunStatus
   phase: string
-  route: RouteName | null
   bookId: string
   purpose: string
   provider: Provider
@@ -65,6 +63,11 @@ export type BookRecord = {
   originalFileSize: number
   parsed: ParsedBook
   originalBlob: Blob
+  // PDF only — first original-PDF page treated as "page 1" of the book
+  // content. Pages 1..(startPage-1) of the originalBlob are preamble:
+  // excluded from analysis, re-attached verbatim at the start of the
+  // exported PDF. Undefined or 1 means analyze everything.
+  startPage?: number
 }
 
 export type SectionRecord = {
@@ -73,14 +76,11 @@ export type SectionRecord = {
   order: number
   section: Section
   phaseStatus: SectionPhaseStatus
-  macroDecision?: MacroDecision
-  microDecision?: MicroDecision
 }
 
 export type SpineRecord = {
   runId: string
   spine: NarrativeSpine
-  canonicalPassages: CanonicalPassage[]
 }
 
 export type BracketKind = 'micro' | 'whole-section'
@@ -111,15 +111,30 @@ export type EventRecord = {
   event: PhaseEvent
 }
 
+export type OntologyRecord = {
+  runId: string
+  tree: OntologyTree
+  storedAt: number
+}
+
+export type InclusionRecord = {
+  runId: string
+  inclusion: Record<string, boolean>
+  updatedAt: number
+}
+
+export type DependenciesRecord = {
+  runId: string
+  nodeId: string
+  result: NodeDependencies
+}
+
 export const PHASE_NAMES: ReadonlyArray<PhaseName> = [
   'A',
   'A5',
-  'B',
-  'B5',
-  'C1',
-  'C15',
-  'C2',
-  'D',
+  'O',
+  'S-leaf',
+  'S-internal',
 ]
 
 export function defaultPhaseStatus(): PhaseStatus {

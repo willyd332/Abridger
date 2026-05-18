@@ -150,7 +150,7 @@ describe('phase-status selectors', () => {
     const book = makeBookRecord({ bookId: 'b1', runId: 'r1' })
     const inFlightStatus = {
       ...defaultSectionPhaseStatus(),
-      B: {
+      O: {
         status: 'in_flight' as const,
         attempts: 1,
         requestStartedAt: Date.now(),

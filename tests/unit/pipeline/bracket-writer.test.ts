@@ -139,7 +139,7 @@ describe('writeBracket', () => {
       completionTokens: 5,
     })
     const result = await writeBracket(makeRequest(), client)
-    expect(result.text).toMatch(/\[bracket-writer failed/)
+    expect(result.text).toMatch(/\[bracket unavailable\]/)
   })
 
   it('retries once when output overshoots 5× the word budget, then truncates', async () => {

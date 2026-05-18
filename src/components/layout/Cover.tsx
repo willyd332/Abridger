@@ -38,7 +38,7 @@ export function Cover({ isOpening, onBegin, onAnimationComplete }: CoverProps) {
         <ClosedBookIllustration />
       </motion.div>
 
-      <h1 className="cover-title drop-cap">The Abridger</h1>
+      <h1 className="cover-title drop-cap">The Book Abridger</h1>
       <p className="cover-subtitle">
         Bring a long book to its narrative spine. Choose your purpose, supply
         your key, and let the press begin its careful work.

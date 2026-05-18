@@ -1,34 +1,23 @@
-import { useMemo } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
-import { useShallow } from 'zustand/react/shallow'
 import {
   useAppStore,
   selectCurrentPhase,
-  selectInFlightSections,
-  selectSections,
-  type ModelMapping,
 } from '@/state'
 import { CostMeter } from '@/components/cost/CostMeter'
 import { BookSpine } from './BookSpine'
-import { SectionGrid } from './SectionGrid'
 import { ActivityLog } from './ActivityLog'
 
 interface PipelineViewProps {
-  modelMapping?: ModelMapping
   onPause?: () => void
   onResume?: () => void
   onCancel?: () => void
 }
 
 const PHASE_DESCRIPTIONS: Record<string, string> = {
-  A: 'Reading the book’s structure and laying out section boundaries.',
-  A5: 'Identifying canonical passages the abridgement must preserve.',
-  B: 'Reading each section and writing a précis with narrative signals.',
-  B5: 'Drafting the narrative spine — central argument, motifs, voice.',
-  C1: 'Macro pass: deciding what to keep, partial, bracket, or drop.',
-  C15: 'Sanity check: escalating any over-eager drops back to KEEP_PARTIAL.',
-  C2: 'Micro pass: marking individual paragraphs for deletion.',
-  D: 'Binding the abridged book and writing the ledger of cuts.',
+  'A-structure': 'Reading the book’s structure and laying out chapter boundaries.',
+  'A5-canonical': 'Identifying canonical passages the abridgement should preserve.',
+  'O-ontology': 'Building the recursive ontology — chapter → subtopic → sub-subtopic → leaf.',
+  'S-leaf': 'Summarizing each 2–5 page leaf node.',
+  'S-internal': 'Synthesizing internal-node summaries from their children.',
 }
 
 function describePhase(phase: string | null): string {
@@ -37,26 +26,12 @@ function describePhase(phase: string | null): string {
 }
 
 export function PipelineView({
-  modelMapping,
   onPause,
   onResume,
   onCancel,
 }: PipelineViewProps) {
-  const reduced = useReducedMotion()
-  const sections = useAppStore(useShallow(selectSections))
-  const inFlight = useAppStore(useShallow(selectInFlightSections))
   const currentPhase = useAppStore(selectCurrentPhase)
   const runStatus = useAppStore((state) => state.job?.run.status)
-
-  const phaseIsD = currentPhase === 'D'
-
-  const activeIds = useMemo(
-    () => inFlight.slice(0, 4).map((s) => s.sectionId),
-    [inFlight],
-  )
-
-  const spineActive =
-    currentPhase === 'A' || currentPhase === 'A5' || sections.length === 0
 
   return (
     <div className="pipeline-view">
@@ -75,52 +50,10 @@ export function PipelineView({
       </section>
 
       <section className="pipeline-view__spine">
-        <BookSpine totalSections={sections.length} active={spineActive} />
+        <BookSpine totalSections={0} active />
       </section>
-
-      <div className="pipeline-view__main">
-        <motion.section
-          className="pipeline-view__grid-wrap"
-          aria-label="Section progress grid"
-          animate={
-            reduced || !phaseIsD
-              ? { scale: 1 }
-              : { scale: [1, 1.02, 0.98, 1] }
-          }
-          transition={
-            reduced || !phaseIsD
-              ? { duration: 0 }
-              : { duration: 1.4, ease: 'easeInOut' }
-          }
-        >
-          <SectionGrid
-            sections={sections}
-            modelMapping={modelMapping}
-            activeSectionIds={activeIds}
-          />
-          {phaseIsD ? <BinderyOverlay /> : null}
-        </motion.section>
-      </div>
 
       <ActivityLog />
     </div>
-  )
-}
-
-function BinderyOverlay() {
-  const reduced = useReducedMotion()
-  return (
-    <motion.div
-      className="bindery-overlay"
-      aria-hidden="true"
-      initial={reduced ? false : { opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: reduced ? 0 : 0.6 }}
-    >
-      <div className="bindery-overlay__seam" />
-      <p className="bindery-overlay__caption">
-        Binding the abridged book…
-      </p>
-    </motion.div>
   )
 }

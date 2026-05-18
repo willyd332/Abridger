@@ -27,28 +27,66 @@ export function createAnthropicAdapter(config: AnthropicAdapterConfig): Provider
     // models by name and skip the param. Safer than maintaining a model
     // allowlist: when in doubt, omit.
     const isReasoningModel = /opus|o1|o3/i.test(model)
+
+    // Anthropic's API has no OpenAI-style `response_format: { type: 'json_object' }`.
+    // Force structured JSON by prefilling the assistant turn with `{` — the model
+    // continues from that prefix. We then prepend `{` back onto the response so
+    // downstream parsers see complete JSON. Reasoning models also support this.
+    const wantsJson =
+      typeof opts.responseFormat === 'object' && opts.responseFormat !== null && 'jsonSchema' in opts.responseFormat
+
     type CreateBody = {
       model: string
       system?: string
       max_tokens: number
       temperature?: number
-      messages: Array<{ role: 'user'; content: string }>
+      messages: Array<{ role: 'user' | 'assistant'; content: string }>
+    }
+    const messages: CreateBody['messages'] = [{ role: 'user', content: opts.user }]
+    if (wantsJson) {
+      messages.push({ role: 'assistant', content: '{' })
     }
     const body: CreateBody = {
       model,
       system: opts.system,
       max_tokens: opts.maxTokens ?? config.defaultMaxTokens ?? DEFAULT_MAX_TOKENS,
-      messages: [{ role: 'user', content: opts.user }],
+      messages,
     }
     if (!isReasoningModel && typeof opts.temperature === 'number') {
       body.temperature = opts.temperature
     }
-    const result = await client.messages
-      .create(body, { signal: opts.signal })
-      .withResponse()
+    let result
+    try {
+      result = await client.messages
+        .create(body, { signal: opts.signal })
+        .withResponse()
+    } catch (err) {
+      // Surface the full Anthropic error body so 400s do not get clipped
+      // in the console to "…e.". The SDK's APIError exposes the parsed
+      // body on `.error` and the status on `.status`.
+      const apiErr = err as {
+        status?: number
+        error?: unknown
+        message?: string
+      }
+      if (apiErr && typeof apiErr === 'object' && 'status' in apiErr) {
+        // eslint-disable-next-line no-console
+        console.error('[anthropic-adapter] API error', {
+          status: apiErr.status,
+          body: apiErr.error,
+          message: apiErr.message,
+          model: body.model,
+          maxTokens: body.max_tokens,
+          systemPreview: body.system?.slice(0, 200),
+          userPreview: body.messages[0]?.content?.slice(0, 200),
+        })
+      }
+      throw err
+    }
 
     const message = result.data
-    const text = extractText(message.content)
+    const rawText = extractText(message.content)
+    const text = wantsJson ? `{${rawText}` : rawText
     return {
       text,
       promptTokens: message.usage.input_tokens,

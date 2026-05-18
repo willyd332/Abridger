@@ -3,7 +3,10 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type {
   BookRecord,
   BracketRecord,
+  DependenciesRecord,
   EventRecord,
+  InclusionRecord,
+  OntologyRecord,
   OutputRecord,
   RunRecord,
   SectionRecord,
@@ -14,16 +17,19 @@ import type {
  * MIGRATIONS.md
  *
  * Database name: `abridger`
- * Current version: 1
+ * Current version: 2
  *
  * Future schema versions MUST preserve the primary keying scheme:
- *   runs:     keyed by `runId`
- *   books:    keyed by `bookId`
- *   sections: compound key `[runId, sectionId]`
- *   spine:    keyed by `runId`
- *   brackets: compound key `[runId, sectionId, deletionIndex]`
- *   outputs:  compound key `[runId, kind]`
- *   events:   auto-increment id; indexed by `[runId, timestamp]`
+ *   runs:         keyed by `runId`
+ *   books:        keyed by `bookId`
+ *   sections:     compound key `[runId, sectionId]`
+ *   spine:        keyed by `runId`
+ *   brackets:     compound key `[runId, sectionId, deletionIndex]`
+ *   outputs:      compound key `[runId, kind]`
+ *   events:       auto-increment id; indexed by `[runId, timestamp]`
+ *   ontology:     keyed by `runId`                              (v2)
+ *   inclusion:    keyed by `runId`                              (v2)
+ *   dependencies: compound key `[runId, nodeId]`                (v2)
  *
  * If a future version renames a store, the upgrade callback MUST migrate
  * existing rows. Never drop data in an upgrade — runs may be multi-day jobs
@@ -31,7 +37,7 @@ import type {
  */
 
 export const DB_NAME = 'abridger'
-export const DB_VERSION = 1
+export const DB_VERSION = 2
 
 export interface AbridgerSchema extends DBSchema {
   runs: {
@@ -68,6 +74,19 @@ export interface AbridgerSchema extends DBSchema {
     value: EventRecord
     indexes: { 'by-run-timestamp': [string, number] }
   }
+  ontology: {
+    key: string
+    value: OntologyRecord
+  }
+  inclusion: {
+    key: string
+    value: InclusionRecord
+  }
+  dependencies: {
+    key: [string, string]
+    value: DependenciesRecord
+    indexes: { 'by-run': string }
+  }
 }
 
 export type AbridgerDb = IDBPDatabase<AbridgerSchema>
@@ -80,6 +99,9 @@ export function getDb(): Promise<AbridgerDb> {
       upgrade(db, oldVersion) {
         if (oldVersion < 1) {
           createInitialStores(db)
+        }
+        if (oldVersion < 2) {
+          createOntologyStores(db)
         }
       },
       blocked() {
@@ -148,4 +170,13 @@ function createInitialStores(db: AbridgerDb): void {
   events.createIndex('by-run-timestamp', ['runId', 'timestamp'], {
     unique: false,
   })
+}
+
+function createOntologyStores(db: AbridgerDb): void {
+  db.createObjectStore('ontology', { keyPath: 'runId' })
+  db.createObjectStore('inclusion', { keyPath: 'runId' })
+  const deps = db.createObjectStore('dependencies', {
+    keyPath: ['runId', 'nodeId'],
+  })
+  deps.createIndex('by-run', 'runId', { unique: false })
 }

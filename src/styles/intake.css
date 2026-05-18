@@ -1,0 +1,83 @@
+/* Streamlined intake — single column, generous breathing room. */
+
+.intake {
+  max-width: 36rem;
+  margin: 4rem auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.intake__field {
+  width: 100%;
+}
+
+.intake .dropzone {
+  padding: 3.5rem 1.5rem;
+  border-width: 1px;
+  border-style: dashed;
+  background: rgba(255, 247, 223, 0.35);
+}
+
+.intake__advanced {
+  margin: 0;
+}
+
+.intake__advanced summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-fg-soft);
+  user-select: none;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0;
+}
+
+.intake__advanced summary::-webkit-details-marker {
+  display: none;
+}
+
+.intake__advanced summary::before {
+  content: '+';
+  display: inline-block;
+  width: 0.9rem;
+  text-align: center;
+  color: var(--gilt);
+  transition: transform 180ms ease;
+}
+
+.intake__advanced[open] summary::before {
+  content: '−';
+}
+
+.intake__ceiling {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.7rem;
+  font-size: 0.92rem;
+  color: var(--ink-fg-soft);
+}
+
+.intake__ceiling input {
+  width: 5.5rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.intake__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.intake__hint {
+  font-size: 0.88rem;
+  color: var(--ink-fg-faint, #8b7350);
+  font-style: italic;
+}

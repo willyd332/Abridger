@@ -52,7 +52,18 @@ describe('schema upgrade', () => {
     const db = await getDb()
     const storeNames = Array.from(db.objectStoreNames).sort()
     expect(storeNames).toEqual(
-      ['books', 'brackets', 'events', 'outputs', 'runs', 'sections', 'spine'].sort(),
+      [
+        'books',
+        'brackets',
+        'dependencies',
+        'events',
+        'inclusion',
+        'ontology',
+        'outputs',
+        'runs',
+        'sections',
+        'spine',
+      ].sort(),
     )
   })
 })

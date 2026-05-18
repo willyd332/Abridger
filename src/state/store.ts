@@ -2,8 +2,19 @@ import { createStore, type StoreApi } from 'zustand/vanilla'
 import { useStore } from 'zustand'
 
 import type { CostCeiling } from '@/llm/types'
+import type {
+  NodeDependencies,
+  OntologyTree,
+} from '@/pipeline/ontology/types'
 
-import { books, runs, sections } from './persistence'
+import {
+  books,
+  dependencies as dependenciesStore,
+  inclusion as inclusionStore,
+  ontology as ontologyStore,
+  runs,
+  sections,
+} from './persistence'
 import type {
   BookRecord,
   NewRun,
@@ -16,6 +27,16 @@ export type IntakeState = {
   key: string
   purpose: string
   storeKeyLocally: boolean
+}
+
+export type CurateState = {
+  tree: OntologyTree | null
+  inclusion: Record<string, boolean>
+  expanded: Record<string, boolean>
+  selectedNodeId: string | null
+  dependenciesCache: Record<string, NodeDependencies>
+  preSuggestSnapshot: Record<string, boolean> | null
+  suggestPending: boolean
 }
 
 export type JobView = {
@@ -62,6 +83,7 @@ export type AppState = {
   tokens: TokenTotals
   activityLog: ActivityEntry[]
   intake: IntakeState
+  curate: CurateState
   setIntake: (patch: Partial<IntakeState>) => void
   beginRun: (
     args: {
@@ -79,6 +101,21 @@ export type AppState = {
   pushActivity: (entry: ActivityEntry) => void
   patchActivity: (id: string, patch: Partial<ActivityEntry>) => void
   clearActivity: () => void
+  setOntologyTree: (tree: OntologyTree | null) => Promise<void>
+  setSelectedNode: (nodeId: string | null) => void
+  toggleNodeInclusion: (nodeId: string) => Promise<void>
+  setNodeInclusion: (nodeId: string, included: boolean) => Promise<void>
+  setSubtreeInclusion: (nodeIds: string[], included: boolean) => Promise<void>
+  setExpanded: (nodeId: string, expanded: boolean) => void
+  setManyExpanded: (patch: Record<string, boolean>) => void
+  storeDependencies: (deps: NodeDependencies) => Promise<void>
+  applySuggestExclusions: (
+    excludedLeafIds: string[],
+  ) => Promise<void>
+  revertSuggest: () => Promise<void>
+  setSuggestPending: (pending: boolean) => void
+  loadCurateFromDB: (runId: string) => Promise<void>
+  resetCurate: () => void
 }
 
 const DEFAULT_INTAKE: IntakeState = {
@@ -94,6 +131,16 @@ const DEFAULT_COST: CostCeiling = {
   billedUsd: 0,
 }
 
+const DEFAULT_CURATE: CurateState = {
+  tree: null,
+  inclusion: {},
+  expanded: {},
+  selectedNodeId: null,
+  dependenciesCache: {},
+  preSuggestSnapshot: null,
+  suggestPending: false,
+}
+
 const MAX_ACTIVITY_ENTRIES = 200
 
 export function createAppStore(): StoreApi<AppState> {
@@ -104,6 +151,7 @@ export function createAppStore(): StoreApi<AppState> {
     tokens: DEFAULT_TOKEN_TOTALS,
     activityLog: [],
     intake: DEFAULT_INTAKE,
+    curate: DEFAULT_CURATE,
 
     setIntake(patch) {
       set((state) => ({ intake: { ...state.intake, ...patch } }))
@@ -211,7 +259,199 @@ export function createAppStore(): StoreApi<AppState> {
         cost: run.cost,
       })
     },
+
+    async setOntologyTree(tree) {
+      const runId = get().currentRunId
+      if (tree && runId) {
+        await ontologyStore.put({ runId, tree, storedAt: Date.now() })
+        const existing = await inclusionStore.get(runId)
+        if (!existing) {
+          const initial: Record<string, boolean> = {}
+          for (const id of tree.leafIdsInOrder) initial[id] = true
+          await inclusionStore.put({
+            runId,
+            inclusion: initial,
+            updatedAt: Date.now(),
+          })
+          set((state) => ({
+            curate: { ...state.curate, tree, inclusion: initial },
+          }))
+        } else {
+          set((state) => ({
+            curate: { ...state.curate, tree, inclusion: existing.inclusion },
+          }))
+        }
+      } else {
+        set((state) => ({ curate: { ...state.curate, tree } }))
+      }
+    },
+
+    setSelectedNode(nodeId) {
+      set((state) => ({
+        curate: { ...state.curate, selectedNodeId: nodeId },
+      }))
+    },
+
+    async toggleNodeInclusion(nodeId) {
+      const runId = get().currentRunId
+      const tree = get().curate.tree
+      if (!runId || !tree) return
+      const leafIds = collectLeafIds(tree, nodeId)
+      const inclusionMap = get().curate.inclusion
+      const allIncluded = leafIds.every((id) => inclusionMap[id] !== false)
+      const nextValue = !allIncluded
+      const updated = await inclusionStore.update(runId, (current) => {
+        const next = { ...current }
+        for (const id of leafIds) next[id] = nextValue
+        return next
+      })
+      set((state) => ({
+        curate: { ...state.curate, inclusion: updated.inclusion },
+      }))
+    },
+
+    async setNodeInclusion(nodeId, included) {
+      const runId = get().currentRunId
+      const tree = get().curate.tree
+      if (!runId || !tree) return
+      const leafIds = collectLeafIds(tree, nodeId)
+      const updated = await inclusionStore.update(runId, (current) => {
+        const next = { ...current }
+        for (const id of leafIds) next[id] = included
+        return next
+      })
+      set((state) => ({
+        curate: { ...state.curate, inclusion: updated.inclusion },
+      }))
+    },
+
+    async setSubtreeInclusion(nodeIds, included) {
+      const runId = get().currentRunId
+      const tree = get().curate.tree
+      if (!runId || !tree) return
+      const leafIds = new Set<string>()
+      for (const id of nodeIds) {
+        for (const lid of collectLeafIds(tree, id)) leafIds.add(lid)
+      }
+      const updated = await inclusionStore.update(runId, (current) => {
+        const next = { ...current }
+        for (const id of leafIds) next[id] = included
+        return next
+      })
+      set((state) => ({
+        curate: { ...state.curate, inclusion: updated.inclusion },
+      }))
+    },
+
+    setExpanded(nodeId, expanded) {
+      set((state) => ({
+        curate: {
+          ...state.curate,
+          expanded: { ...state.curate.expanded, [nodeId]: expanded },
+        },
+      }))
+    },
+
+    setManyExpanded(patch) {
+      set((state) => ({
+        curate: {
+          ...state.curate,
+          expanded: { ...state.curate.expanded, ...patch },
+        },
+      }))
+    },
+
+    async storeDependencies(deps) {
+      const runId = get().currentRunId
+      if (!runId) return
+      await dependenciesStore.put({
+        runId,
+        nodeId: deps.focalNodeId,
+        result: deps,
+      })
+      set((state) => ({
+        curate: {
+          ...state.curate,
+          dependenciesCache: {
+            ...state.curate.dependenciesCache,
+            [deps.focalNodeId]: deps,
+          },
+        },
+      }))
+    },
+
+    async applySuggestExclusions(excludedLeafIds) {
+      const runId = get().currentRunId
+      if (!runId) return
+      const snapshot = { ...get().curate.inclusion }
+      const updated = await inclusionStore.update(runId, (current) => {
+        const next = { ...current }
+        for (const id of excludedLeafIds) next[id] = false
+        return next
+      })
+      set((state) => ({
+        curate: {
+          ...state.curate,
+          inclusion: updated.inclusion,
+          preSuggestSnapshot: snapshot,
+          suggestPending: false,
+        },
+      }))
+    },
+
+    async revertSuggest() {
+      const runId = get().currentRunId
+      const snapshot = get().curate.preSuggestSnapshot
+      if (!runId || !snapshot) return
+      const updated = await inclusionStore.update(runId, () => ({ ...snapshot }))
+      set((state) => ({
+        curate: {
+          ...state.curate,
+          inclusion: updated.inclusion,
+          preSuggestSnapshot: null,
+        },
+      }))
+    },
+
+    setSuggestPending(pending) {
+      set((state) => ({
+        curate: { ...state.curate, suggestPending: pending },
+      }))
+    },
+
+    async loadCurateFromDB(runId) {
+      const treeRecord = await ontologyStore.get(runId)
+      const inclusionRecord = await inclusionStore.get(runId)
+      const depsRecords = await dependenciesStore.listByRun(runId)
+      const dependenciesCache: Record<string, NodeDependencies> = {}
+      for (const r of depsRecords) dependenciesCache[r.nodeId] = r.result
+      set((state) => ({
+        curate: {
+          ...state.curate,
+          tree: treeRecord?.tree ?? null,
+          inclusion: inclusionRecord?.inclusion ?? {},
+          dependenciesCache,
+        },
+      }))
+    },
+
+    resetCurate() {
+      set({ curate: DEFAULT_CURATE })
+    },
   }))
+}
+
+function collectLeafIds(tree: OntologyTree, nodeId: string): string[] {
+  const out: string[] = []
+  const stack = [nodeId]
+  while (stack.length) {
+    const id = stack.pop()!
+    const node = tree.nodes[id]
+    if (!node) continue
+    if (node.isLeaf) out.push(node.id)
+    else stack.push(...[...node.childIds].reverse())
+  }
+  return out
 }
 
 const sharedStore: StoreApi<AppState> = createAppStore()

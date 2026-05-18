@@ -4,6 +4,9 @@ import { books, outputs, runs } from '@/state'
 import type { OutputRecord, RunRecord } from '@/state'
 
 export const OPEN_PAST_RUNS_EVENT = 'abridger:open-past-runs'
+export const RESUME_PAST_RUN_EVENT = 'abridger:resume-past-run'
+
+export type ResumePastRunDetail = { runId: string }
 
 interface RunSummary {
   run: RunRecord
@@ -191,6 +194,20 @@ export function PastRunsOverlay() {
                       {summary.run.purpose || <em>(no purpose recorded)</em>}
                     </div>
                     <div className="past-runs-row__actions">
+                      <button
+                        type="button"
+                        className="gilt-button gilt-button--primary"
+                        onClick={() => {
+                          window.dispatchEvent(
+                            new CustomEvent<ResumePastRunDetail>(RESUME_PAST_RUN_EVENT, {
+                              detail: { runId: summary.run.runId },
+                            }),
+                          )
+                          setOpen(false)
+                        }}
+                      >
+                        Open
+                      </button>
                       {summary.outputs.length === 0 ? (
                         <span className="past-runs-row__no-outputs">
                           No outputs persisted for this run.
