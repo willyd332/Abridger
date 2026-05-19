@@ -23,7 +23,14 @@
 }
 
 .building__pane--left {
-  border-right: 1px solid rgba(184, 134, 11, 0.18);
+  z-index: 1;
+}
+
+.building__pane--right {
+  /* Let cascade lines overflow leftward across the implicit divider and render
+     over the left pane's network graph. */
+  overflow: visible;
+  z-index: 2;
 }
 
 .building__overlay {
@@ -184,8 +191,9 @@
   position: relative;
   width: 100%;
   height: 100%;
-  overflow: hidden;
-  /* fade bands top + bottom */
+  /* Visible — lines may extend leftward across the implicit divider. The mask
+     below still provides the top/bottom fade bands within the cascade box. */
+  overflow: visible;
   -webkit-mask-image:
     linear-gradient(180deg, transparent 0%, black 8%, black 78%, transparent 100%);
   mask-image:
@@ -320,10 +328,6 @@
   .building {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr 1fr;
-  }
-  .building__pane--left {
-    border-right: none;
-    border-bottom: 1px solid rgba(184, 134, 11, 0.18);
   }
   .stats-ticker {
     right: 0.8rem;

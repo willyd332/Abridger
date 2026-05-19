@@ -78,78 +78,107 @@ async function summarizeLeaf(
       sectionId: node.id,
     })
   }
-  const user = [
-    `Title chain: ${chain}`,
-    `Pages: ${node.startPage ?? '?'}–${node.endPage ?? '?'}`,
-    'Produce a 60–120 word neutral-descriptive summary that preserves proper nouns, dates, named theories, and rhetorical moves.',
-    'Return JSON: {"summary":"…","wordCount":<int>}',
-  ].join('\n')
 
-  const result = await client.callWithBookContent({
-    role: prompt.meta.role,
-    temperature: prompt.meta.temperature,
-    responseFormat: prompt.meta.responseFormat === 'json' ? { jsonSchema: {} } : 'text',
-    maxTokens: prompt.meta.maxTokens,
-    system: prompt.body,
-    user,
-    bookContent: leafText,
-    signal: opts.signal,
-    metadata: {
-      phase: PHASE_S_LEAF_NAME,
-      sectionId: node.id,
-      requestId: `phaseS-leaf-${node.id}`,
-    },
-  })
+  const baseUser = (force: boolean): string =>
+    [
+      `Title chain: ${chain}`,
+      `Pages: ${node.startPage ?? '?'}–${node.endPage ?? '?'}`,
+      'Produce a 60–120 word neutral-descriptive summary that preserves proper nouns, dates, named theories, and rhetorical moves.',
+      'Return JSON: {"summary":"…","wordCount":<int>}',
+      force
+        ? '\nRETRY: the previous attempt failed to parse. Return ONLY a single JSON object with a non-empty `summary` string at least 20 characters long. No prose before or after the JSON. No markdown fences.'
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
 
-  if (!result.ok) {
-    opts.emit?.({
-      kind: 'phase-warning',
-      phase: PHASE_S_LEAF_NAME,
-      warning: `Leaf summary failed for ${node.id}: ${result.error.kind}`,
-      sectionId: node.id,
-    })
-    return placeholderSummary(
-      `[Summary unavailable. Passage covers pages ${node.startPage ?? '?'}–${node.endPage ?? '?'}.]`,
-    )
-  }
-
-  try {
-    const parsed = summarizeResponseSchema.parse(parseLlmJsonOrThrow(result.data))
-    for (const sentence of sampleSentences(parsed.summary, 5)) {
-      opts.emit?.({
-        kind: 'phase-sample',
+  const attempt = async (
+    force: boolean,
+    suffix: string,
+  ): Promise<NodeSummary | null> => {
+    const result = await client.callWithBookContent({
+      role: prompt.meta.role,
+      temperature: prompt.meta.temperature,
+      responseFormat: prompt.meta.responseFormat === 'json' ? { jsonSchema: {} } : 'text',
+      maxTokens: prompt.meta.maxTokens,
+      system: prompt.body,
+      user: baseUser(force),
+      bookContent: leafText,
+      signal: opts.signal,
+      metadata: {
         phase: PHASE_S_LEAF_NAME,
-        source: 'reasoning',
-        text: sentence,
         sectionId: node.id,
+        requestId: `phaseS-leaf-${node.id}${suffix}`,
+      },
+    })
+    if (!result.ok) {
+      // eslint-disable-next-line no-console
+      console.warn('[summarize-leaf] call failed', {
+        nodeId: node.id,
+        errorKind: result.error.kind,
+        attemptSuffix: suffix,
       })
+      return null
     }
-    opts.emit?.({
-      kind: 'tree-node',
-      phase: PHASE_S_LEAF_NAME,
-      nodeId: node.id,
-      parentId: node.parentId,
-      depth: node.depth,
-      title: node.title,
-      isLeaf: true,
-      summarized: true,
-    })
-    return {
-      text: parsed.summary,
-      wordCount:
-        parsed.wordCount ?? parsed.summary.split(/\s+/).filter(Boolean).length,
-      generatedAt: Date.now(),
+    try {
+      const parsed = summarizeResponseSchema.parse(parseLlmJsonOrThrow(result.data))
+      for (const sentence of sampleSentences(parsed.summary, 5)) {
+        opts.emit?.({
+          kind: 'phase-sample',
+          phase: PHASE_S_LEAF_NAME,
+          source: 'reasoning',
+          text: sentence,
+          sectionId: node.id,
+        })
+      }
+      opts.emit?.({
+        kind: 'tree-node',
+        phase: PHASE_S_LEAF_NAME,
+        nodeId: node.id,
+        parentId: node.parentId,
+        depth: node.depth,
+        title: node.title,
+        isLeaf: true,
+        summarized: true,
+      })
+      return {
+        text: parsed.summary,
+        wordCount:
+          parsed.wordCount ?? parsed.summary.split(/\s+/).filter(Boolean).length,
+        generatedAt: Date.now(),
+      }
+    } catch (err) {
+      const rawPreview =
+        typeof result.data === 'string' ? result.data.slice(0, 300) : ''
+      // eslint-disable-next-line no-console
+      console.warn('[summarize-leaf] parse failed', {
+        nodeId: node.id,
+        attemptSuffix: suffix,
+        error: err instanceof Error ? err.message : String(err),
+        rawPreview,
+      })
+      return null
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    opts.emit?.({
-      kind: 'phase-warning',
-      phase: PHASE_S_LEAF_NAME,
-      warning: `Leaf summary JSON invalid for ${node.id}: ${message}`,
-      sectionId: node.id,
-    })
-    return placeholderSummary(`[Summary unavailable.]`)
   }
+
+  // First pass — standard prompt.
+  const first = await attempt(false, '')
+  if (first) return first
+
+  // Second pass — explicit "JSON only, no prose" reminder. Most parse
+  // failures are the model emitting prose around the JSON.
+  const second = await attempt(true, '-retry')
+  if (second) return second
+
+  opts.emit?.({
+    kind: 'phase-warning',
+    phase: PHASE_S_LEAF_NAME,
+    warning: `Leaf summary failed twice for ${node.id}; using placeholder.`,
+    sectionId: node.id,
+  })
+  return placeholderSummary(
+    `[Summary unavailable after retry. Passage covers pages ${node.startPage ?? '?'}–${node.endPage ?? '?'}.]`,
+  )
 }
 
 async function summarizeInternal(
@@ -164,81 +193,105 @@ async function summarizeInternal(
   const childrenBlock = childrenSummaries
     .map((c, i) => `${i + 1}. "${c.title}" — ${c.summary}`)
     .join('\n')
-  const user = [
-    `Title chain: ${chain}`,
-    `Pages: ${node.startPage ?? '?'}–${node.endPage ?? '?'}`,
-    'Synthesize the children below into a 100–250 word description of the through-line of this node. Do not enumerate them mechanically.',
-    'Return JSON: {"summary":"…","wordCount":<int>}',
-    '',
-    'Children:',
-    childrenBlock,
-  ].join('\n')
 
-  const result = await client.callWithBookContent({
-    role: prompt.meta.role,
-    temperature: prompt.meta.temperature,
-    responseFormat: prompt.meta.responseFormat === 'json' ? { jsonSchema: {} } : 'text',
-    maxTokens: prompt.meta.maxTokens,
-    system: prompt.body,
-    user,
-    bookContent: childrenBlock,
-    signal: opts.signal,
-    metadata: {
-      phase: PHASE_S_INTERNAL_NAME,
-      sectionId: node.id,
-      requestId: `phaseS-internal-${node.id}`,
-    },
-  })
+  const baseUser = (force: boolean): string =>
+    [
+      `Title chain: ${chain}`,
+      `Pages: ${node.startPage ?? '?'}–${node.endPage ?? '?'}`,
+      'Synthesize the children below into a 100–250 word description of the through-line of this node. Do not enumerate them mechanically.',
+      'Return JSON: {"summary":"…","wordCount":<int>}',
+      '',
+      'Children:',
+      childrenBlock,
+      force
+        ? '\nRETRY: the previous attempt failed to parse. Return ONLY a single JSON object with a non-empty `summary` string at least 20 characters long. No prose before or after the JSON. No markdown fences.'
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
 
-  if (!result.ok) {
-    opts.emit?.({
-      kind: 'phase-warning',
-      phase: PHASE_S_INTERNAL_NAME,
-      warning: `Internal summary failed for ${node.id}: ${result.error.kind}`,
-      sectionId: node.id,
-    })
-    const fallback = childrenSummaries.map((c) => c.title).join('; ')
-    return placeholderSummary(`This node covers: ${fallback}.`)
-  }
-
-  try {
-    const parsed = summarizeResponseSchema.parse(parseLlmJsonOrThrow(result.data))
-    for (const sentence of sampleSentences(parsed.summary, 5)) {
-      opts.emit?.({
-        kind: 'phase-sample',
+  const attempt = async (
+    force: boolean,
+    suffix: string,
+  ): Promise<NodeSummary | null> => {
+    const result = await client.callWithBookContent({
+      role: prompt.meta.role,
+      temperature: prompt.meta.temperature,
+      responseFormat: prompt.meta.responseFormat === 'json' ? { jsonSchema: {} } : 'text',
+      maxTokens: prompt.meta.maxTokens,
+      system: prompt.body,
+      user: baseUser(force),
+      bookContent: childrenBlock,
+      signal: opts.signal,
+      metadata: {
         phase: PHASE_S_INTERNAL_NAME,
-        source: 'reasoning',
-        text: sentence,
         sectionId: node.id,
+        requestId: `phaseS-internal-${node.id}${suffix}`,
+      },
+    })
+    if (!result.ok) {
+      // eslint-disable-next-line no-console
+      console.warn('[summarize-internal] call failed', {
+        nodeId: node.id,
+        errorKind: result.error.kind,
+        attemptSuffix: suffix,
       })
+      return null
     }
-    opts.emit?.({
-      kind: 'tree-node',
-      phase: PHASE_S_INTERNAL_NAME,
-      nodeId: node.id,
-      parentId: node.parentId,
-      depth: node.depth,
-      title: node.title,
-      isLeaf: false,
-      summarized: true,
-    })
-    return {
-      text: parsed.summary,
-      wordCount:
-        parsed.wordCount ?? parsed.summary.split(/\s+/).filter(Boolean).length,
-      generatedAt: Date.now(),
+    try {
+      const parsed = summarizeResponseSchema.parse(parseLlmJsonOrThrow(result.data))
+      for (const sentence of sampleSentences(parsed.summary, 5)) {
+        opts.emit?.({
+          kind: 'phase-sample',
+          phase: PHASE_S_INTERNAL_NAME,
+          source: 'reasoning',
+          text: sentence,
+          sectionId: node.id,
+        })
+      }
+      opts.emit?.({
+        kind: 'tree-node',
+        phase: PHASE_S_INTERNAL_NAME,
+        nodeId: node.id,
+        parentId: node.parentId,
+        depth: node.depth,
+        title: node.title,
+        isLeaf: false,
+        summarized: true,
+      })
+      return {
+        text: parsed.summary,
+        wordCount:
+          parsed.wordCount ?? parsed.summary.split(/\s+/).filter(Boolean).length,
+        generatedAt: Date.now(),
+      }
+    } catch (err) {
+      const rawPreview =
+        typeof result.data === 'string' ? result.data.slice(0, 300) : ''
+      // eslint-disable-next-line no-console
+      console.warn('[summarize-internal] parse failed', {
+        nodeId: node.id,
+        attemptSuffix: suffix,
+        error: err instanceof Error ? err.message : String(err),
+        rawPreview,
+      })
+      return null
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    opts.emit?.({
-      kind: 'phase-warning',
-      phase: PHASE_S_INTERNAL_NAME,
-      warning: `Internal summary JSON invalid for ${node.id}: ${message}`,
-      sectionId: node.id,
-    })
-    const fallback = childrenSummaries.map((c) => c.title).join('; ')
-    return placeholderSummary(`This node covers: ${fallback}.`)
   }
+
+  const first = await attempt(false, '')
+  if (first) return first
+  const second = await attempt(true, '-retry')
+  if (second) return second
+
+  opts.emit?.({
+    kind: 'phase-warning',
+    phase: PHASE_S_INTERNAL_NAME,
+    warning: `Internal summary failed twice for ${node.id}; using fallback.`,
+    sectionId: node.id,
+  })
+  const fallback = childrenSummaries.map((c) => c.title).join('; ')
+  return placeholderSummary(`This node covers: ${fallback}.`)
 }
 
 function groupByDepthAscending(tree: OntologyTree): OntologyNode[][] {
